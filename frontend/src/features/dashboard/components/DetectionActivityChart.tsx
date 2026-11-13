@@ -139,7 +139,9 @@ export const DetectionActivityChart: React.FC<DetectionActivityChartProps> = ({ 
               <span>Verified Hotspots (&gt; 0.85)</span>
             </span>
           </div>
-          <span>Peak: 41 detections (Today)</span>
+          <span>
+            Peak: {data.length > 0 ? Math.max(...data.map((d) => d.detections)) : 41} detections (Mar 14 - Today)
+          </span>
         </div>
       </CardContent>
     </Card>

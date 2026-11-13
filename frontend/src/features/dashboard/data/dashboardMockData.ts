@@ -63,7 +63,7 @@ export const MOCK_SCENES: DashboardScene[] = [
     name: "EMIT_L2A_ALGERIA_MINERAL_22",
     satellite: "NASA EMIT (ISS)",
     platform: "Spaceborne",
-    acquisitionDate: "2024-04-02",
+    acquisitionDate: "2024-03-02",
     bandsCount: 285,
     spectralRange: "381 – 2493 nm",
     spatialResolution: "60.0m GSD",
@@ -136,7 +136,7 @@ export const MOCK_AOIS: DashboardAOI[] = [
     location: "Tamanrasset, Algeria",
     areaKm2: 520.8,
     crs: "EPSG:32631 (UTM 31N)",
-    lastModified: "2024-04-03",
+    lastModified: "2024-03-03",
     activeSceneName: "EMIT_L2A_ALGERIA_MINERAL_22",
   },
   {
@@ -268,7 +268,8 @@ export const MOCK_ALGORITHM_DISTRIBUTION: AlgorithmDistribution[] = [
 ];
 
 /**
- * Daily Detection Activity Trend over Last 7 Days
+ * Daily Detection Activity Trend over Last 7 Days (March 08 – March 14, 2024)
+ * Sum of 7-day detections: 12 + 19 + 8 + 27 + 34 + 22 + 41 = 163 detections
  */
 export const MOCK_DETECTION_ACTIVITY: DailyDetectionData[] = [
   { date: "2024-03-08", dayLabel: "Mar 08", detections: 12, hotspots: 2 },
@@ -277,7 +278,7 @@ export const MOCK_DETECTION_ACTIVITY: DailyDetectionData[] = [
   { date: "2024-03-11", dayLabel: "Mar 11", detections: 27, hotspots: 6 },
   { date: "2024-03-12", dayLabel: "Mar 12", detections: 34, hotspots: 7 },
   { date: "2024-03-13", dayLabel: "Mar 13", detections: 22, hotspots: 3 },
-  { date: "2024-03-14", dayLabel: "Today", detections: 41, hotspots: 9 },
+  { date: "2024-03-14", dayLabel: "Mar 14", detections: 41, hotspots: 9 },
 ];
 
 /**
@@ -340,8 +341,9 @@ export const getDashboardData = (): DashboardData => {
   const completedAnalyses = 148;
   const activeAnalyses = 2; // running + queued
 
+  // Exactly 163 detections across the 7-day window
   const totalDetections = MOCK_DETECTION_ACTIVITY.reduce((acc, curr) => acc + curr.detections, 0);
-  const recentDetections = 41; // today
+  const recentDetections = MOCK_DETECTION_ACTIVITY[MOCK_DETECTION_ACTIVITY.length - 1]?.detections ?? 41;
 
   return {
     metrics: {
