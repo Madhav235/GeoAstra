@@ -67,7 +67,7 @@ export const ProfilePage: React.FC = () => {
                   {user?.email || "alex.mercer@geoastra.io"}
                 </p>
                 <Badge variant="primary" size="sm" className="mt-1">
-                  Senior Geospatial Analyst
+                  {user?.role || "Senior Analyst"}
                 </Badge>
               </div>
 

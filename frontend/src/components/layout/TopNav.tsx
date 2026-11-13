@@ -68,15 +68,16 @@ export const TopNav: React.FC = () => {
     toast.info("Notification Feed", "Telemetry heartbeat checked. No critical anomalies.");
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsUserMenuOpen(false);
-    logout();
-    toast.info("Logged Out", "Analyst workstation session ended.");
+    await logout();
+    toast.success("Session Ended", "Analyst workstation session signed out.");
     navigate("/login", { replace: true });
   };
 
-  const userName = user?.name || "Alex Mercer";
-  const userEmail = user?.email || "alex.mercer@geoastra.io";
+  const userName = user?.name || "Analyst";
+  const userEmail = user?.email || "analyst@geoastra.demo";
+  const userRole = user?.role || "Senior Analyst";
 
   return (
     <header className="h-13 bg-surface-secondary/90 backdrop-blur-md border-b border-border-subtle px-4 lg:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30">
@@ -190,9 +191,9 @@ export const TopNav: React.FC = () => {
                 </p>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <Badge variant="primary" size="sm">
-                    Analyst
+                    {userRole}
                   </Badge>
-                  <span className="text-2xs text-content-muted font-mono">
+                  <span className="text-2xs text-content-muted font-mono truncate max-w-[120px]">
                     ID: {user?.id ? user.id.slice(0, 8) : "demo"}
                   </span>
                 </div>
