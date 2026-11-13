@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { useLayoutStore } from "@/hooks/useLayoutStore";
+import { useAuthStore } from "@/features/auth/useAuthStore";
 import { NAVIGATION_CONFIG } from "@/constants/navigation";
 import {
   Menu,
@@ -9,7 +10,7 @@ import {
   Moon,
   ChevronRight,
   Shield,
-  User,
+  User as UserIcon,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -20,7 +21,9 @@ import { useToast } from "@/hooks/useToast";
 
 export const TopNav: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { toggleMobileMenu } = useLayoutStore();
+  const { user, logout } = useAuthStore();
   const toast = useToast();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -58,12 +61,22 @@ export const TopNav: React.FC = () => {
   }
 
   const handleSearchClick = () => {
-    toast.info("Global Search", "Full catalog search indexing will be activated in Phase 2.");
+    toast.info("Global Search", "Full catalog search indexing will be activated in Phase 3.");
   };
 
   const handleNotificationClick = () => {
-    toast.info("Notification Feed", "3 scientific processing jobs completed recently.");
+    toast.info("Notification Feed", "Telemetry heartbeat checked. No critical anomalies.");
   };
+
+  const handleLogout = () => {
+    setIsUserMenuOpen(false);
+    logout();
+    toast.info("Logged Out", "Analyst workstation session ended.");
+    navigate("/login", { replace: true });
+  };
+
+  const userName = user?.name || "Alex Mercer";
+  const userEmail = user?.email || "alex.mercer@geoastra.io";
 
   return (
     <header className="h-13 bg-surface-secondary/90 backdrop-blur-md border-b border-border-subtle px-4 lg:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30">
@@ -112,8 +125,8 @@ export const TopNav: React.FC = () => {
         {/* Quick System Status Indicator */}
         <div className="hidden sm:flex items-center">
           <Link to="/status">
-            <Badge variant="success" size="sm" dot className="hover:opacity-90 cursor-pointer">
-              Services Normal
+            <Badge variant="warning" size="sm" dot className="hover:opacity-90 cursor-pointer">
+              BACKEND NOT CONNECTED (DEMO)
             </Badge>
           </Link>
         </div>
@@ -131,7 +144,7 @@ export const TopNav: React.FC = () => {
         </Tooltip>
 
         {/* Notifications Icon Button */}
-        <Tooltip content="3 New System Alerts" position="bottom">
+        <Tooltip content="System Telemetry Feed" position="bottom">
           <button
             type="button"
             onClick={handleNotificationClick}
@@ -154,13 +167,13 @@ export const TopNav: React.FC = () => {
             aria-expanded={isUserMenuOpen}
             aria-haspopup="true"
           >
-            <Avatar name="Alex Mercer" size="sm" status="online" />
+            <Avatar name={userName} size="sm" status="online" />
             <div className="hidden xl:flex flex-col text-left">
               <span className="text-xs font-semibold text-content-primary leading-tight">
-                Alex Mercer
+                {userName}
               </span>
-              <span className="text-2xs font-mono text-content-muted leading-tight">
-                Senior Analyst
+              <span className="text-2xs font-mono text-content-muted leading-tight truncate max-w-[130px]">
+                {userEmail}
               </span>
             </div>
           </button>
@@ -170,17 +183,17 @@ export const TopNav: React.FC = () => {
             <div className="absolute right-0 mt-2 w-56 rounded-lg bg-surface-elevated border border-border-strong shadow-modal py-1.5 z-50 animate-slide-down text-left">
               <div className="px-3.5 py-2 border-b border-border-subtle">
                 <p className="text-xs font-semibold text-content-primary">
-                  Alex Mercer
+                  {userName}
                 </p>
                 <p className="text-2xs font-mono text-content-muted truncate">
-                  alex.mercer@geoastra.io
+                  {userEmail}
                 </p>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <Badge variant="primary" size="sm">
-                    Lead Scientist
+                    Analyst
                   </Badge>
                   <span className="text-2xs text-content-muted font-mono">
-                    ID: 8077-d0d5
+                    ID: {user?.id ? user.id.slice(0, 8) : "demo"}
                   </span>
                 </div>
               </div>
@@ -191,7 +204,7 @@ export const TopNav: React.FC = () => {
                   onClick={() => setIsUserMenuOpen(false)}
                   className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-content-secondary hover:text-content-primary hover:bg-surface-hover transition-colors"
                 >
-                  <User className="w-3.5 h-3.5 text-accent-primary" />
+                  <UserIcon className="w-3.5 h-3.5 text-accent-primary" />
                   <span>Analyst Profile</span>
                 </Link>
 
@@ -217,10 +230,7 @@ export const TopNav: React.FC = () => {
               <div className="border-t border-border-subtle pt-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsUserMenuOpen(false);
-                    toast.info("Session", "Logged out simulation. Authentication will be wired in Milestone 2.");
-                  }}
+                  onClick={handleLogout}
                   className="flex items-center gap-2.5 w-full text-left px-3.5 py-2 text-xs text-status-danger hover:bg-status-danger/10 transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" />

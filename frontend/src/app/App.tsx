@@ -3,11 +3,18 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "./router";
 import { ToastProvider } from "./providers/ToastProvider";
 import { useLayoutStore } from "@/hooks/useLayoutStore";
+import { useAuthStore } from "@/features/auth/useAuthStore";
 import { useToast } from "@/hooks/useToast";
 
 export const App: React.FC = () => {
   const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
+  const initializeAuth = useAuthStore((state) => state.initialize);
   const toast = useToast();
+
+  // Initialize auth session on boot
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
 
   // Global workstation keyboard shortcuts
   useEffect(() => {
@@ -28,7 +35,7 @@ export const App: React.FC = () => {
         e.preventDefault();
         toast.info(
           "Workstation Search",
-          "Global catalog search index will be enabled in Phase 2."
+          "Global catalog search index will be enabled in Phase 3."
         );
       }
     };
@@ -45,4 +52,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-

@@ -7,7 +7,6 @@ import {
   Orbit,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
@@ -102,24 +101,23 @@ export const Sidebar: React.FC = () => {
           ))}
         </nav>
 
-        {/* Telemetry Indicator & Collapse Control Footer */}
+        {/* Environment Indicator & Collapse Control Footer */}
         <div className="p-3 border-t border-border-subtle bg-surface-panel/40 shrink-0 flex flex-col gap-2">
-          {/* Engine Status Pill */}
+          {/* Environment Status Pill */}
           {!isSidebarCollapsed ? (
-            <div className="px-2.5 py-2 rounded bg-surface-elevated/70 border border-border-subtle flex items-center justify-between text-2xs font-mono">
+            <div className="px-2.5 py-2 rounded bg-surface-elevated/70 border border-status-warning/30 flex items-center justify-between text-2xs font-mono">
               <span className="flex items-center gap-1.5 text-content-secondary">
-                <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
-                TELEMETRY
+                <span className="w-2 h-2 rounded-full bg-status-warning animate-pulse" />
+                ENVIRONMENT
               </span>
-              <span className="text-status-success font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                ONLINE
+              <span className="text-status-warning font-semibold flex items-center gap-1">
+                DEMO MODE
               </span>
             </div>
           ) : (
-            <Tooltip content="Telemetry: Systems Online" position="right">
-              <div className="w-10 h-8 mx-auto rounded bg-surface-elevated flex items-center justify-center text-status-success">
-                <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
+            <Tooltip content="Environment: Demo Mode (Backend Not Connected)" position="right">
+              <div className="w-10 h-8 mx-auto rounded bg-surface-elevated border border-status-warning/30 flex items-center justify-center text-status-warning">
+                <span className="w-2 h-2 rounded-full bg-status-warning animate-pulse" />
               </div>
             </Tooltip>
           )}
