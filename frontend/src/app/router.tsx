@@ -77,6 +77,10 @@ export const router = createBrowserRouter([
         element: <ResultsExplorerPage />,
       },
       {
+        path: "results/:jobId",
+        element: <ResultsExplorerPage />,
+      },
+      {
         path: "reports",
         element: <ReportsPage />,
       },
