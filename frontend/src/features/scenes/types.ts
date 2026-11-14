@@ -16,6 +16,8 @@ export interface SceneCatalogItem {
   spatialResolutionM: number | null;
   spectralBands: number | null;
   wavelengthRangeNm: [number, number] | null;
+  badBandRanges?: Array<[number, number]>;
+  badBandIndices?: number[];
   dataFormat: string | null;
   groundTruthAvailable: boolean | null;
   groundTruthClasses: string[];

@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useDemoAnalysisJobStore } from "./store/demoAnalysisJobStore";
 import {
   ArrowRight,
   RefreshCw,
@@ -21,6 +22,10 @@ interface JobItem {
   workerNode: string;
   timestamp: string;
   detectionCount?: number;
+  demo?: boolean;
+  sample?: boolean;
+  aoiName?: string;
+  targetSignatureName?: string | null;
 }
 
 const SAMPLE_JOBS: JobItem[] = [
@@ -79,24 +84,40 @@ const SAMPLE_JOBS: JobItem[] = [
 ];
 
 export const JobsPage: React.FC = () => {
-  const [filter, setFilter] = useState<"all" | "running" | "completed" | "failed">("all");
+  const [filter, setFilter] = useState<"all" | "queued" | "running" | "completed" | "failed">("all");
+  const demoJobs = useDemoAnalysisJobStore((state) => state.jobs);
 
-  const filteredJobs = SAMPLE_JOBS.filter((job) => {
+  const submittedJobs: JobItem[] = demoJobs.map((job) => ({
+    id: job.id,
+    algorithm: job.configuration.algorithm.toUpperCase(),
+    sceneName: job.sceneName,
+    status: job.status,
+    progress: 0,
+    duration: "No processing executed",
+    workerNode: "Frontend demo queue",
+    timestamp: new Date(job.submittedAt).toLocaleString(),
+    demo: true,
+    aoiName: job.aoiName,
+    targetSignatureName: job.targetSignatureName,
+  }));
+  const allJobs = [...submittedJobs, ...SAMPLE_JOBS.map((job) => ({ ...job, sample: true }))];
+  const filteredJobs = allJobs.filter((job) => {
     if (filter === "all") return true;
     return job.status === filter;
   });
+  const countByStatus = (status: JobItem["status"]) => SAMPLE_JOBS.filter((job) => job.status === status).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
       <PageHeader
         category="PIPELINE ORCHESTRATION"
-        title="Asynchronous Processing Jobs & Queue"
-        subtitle="Monitor distributed execution across BullMQ queues, worker threads, and Python AI Engine compute nodes."
+        title="Analysis Jobs & Queue"
+        subtitle="Review frontend demo job records and illustrative sample entries. No live workers or backend queue are connected."
         actions={
           <div className="flex items-center gap-2">
             <Badge variant="warning" size="md" dot>
-              SAMPLE PROCESSING QUEUE
+              DEMO JOBS &amp; SAMPLES
             </Badge>
           </div>
         }
@@ -107,7 +128,7 @@ export const JobsPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-status-warning shrink-0" />
           <span className="text-content-secondary">
-            <strong className="text-status-warning font-semibold">Illustrative Task Queue:</strong> The job records and progress meters below represent BullMQ and Redis orchestration state verified in the backend audit. Live cluster polling is disconnected in demo workstation mode.
+            <strong className="text-status-warning font-semibold">Frontend Demo Queue:</strong> Jobs launched from Analysis Studio are persisted mock configuration records. Other rows are illustrative sample records; no worker runs and no analysis output is generated.
           </span>
         </div>
       </div>
@@ -117,11 +138,11 @@ export const JobsPage: React.FC = () => {
         <Card variant="default">
           <CardHeader className="pb-2">
             <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Running Jobs
+              Running Sample Records
             </CardDescription>
             <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-accent-primary">1</CardTitle>
-              <span className="text-2xs text-content-muted">GPU node active</span>
+              <CardTitle className="text-xl font-bold font-mono text-accent-primary">{countByStatus("running")}</CardTitle>
+              <span className="text-2xs text-content-muted">illustrative only</span>
             </div>
           </CardHeader>
         </Card>
@@ -129,11 +150,11 @@ export const JobsPage: React.FC = () => {
         <Card variant="default">
           <CardHeader className="pb-2">
             <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Queued Jobs
+              Queued Records
             </CardDescription>
             <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-status-warning">1</CardTitle>
-              <span className="text-2xs text-content-muted">In BullMQ queue</span>
+              <CardTitle className="text-xl font-bold font-mono text-status-warning">{countByStatus("queued") + demoJobs.length}</CardTitle>
+              <span className="text-2xs text-content-muted">{demoJobs.length} local demo job(s)</span>
             </div>
           </CardHeader>
         </Card>
@@ -141,11 +162,11 @@ export const JobsPage: React.FC = () => {
         <Card variant="default">
           <CardHeader className="pb-2">
             <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Completed
+              Completed Sample Records
             </CardDescription>
             <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-status-success">148</CardTitle>
-              <span className="text-2xs text-content-muted">98.6% success</span>
+              <CardTitle className="text-xl font-bold font-mono text-status-success">{countByStatus("completed")}</CardTitle>
+              <span className="text-2xs text-content-muted">no verified output</span>
             </div>
           </CardHeader>
         </Card>
@@ -153,11 +174,11 @@ export const JobsPage: React.FC = () => {
         <Card variant="default">
           <CardHeader className="pb-2">
             <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Failed / Retried
+              Failed Sample Records
             </CardDescription>
             <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-status-danger">2</CardTitle>
-              <span className="text-2xs text-content-muted">Memory ceiling</span>
+              <CardTitle className="text-xl font-bold font-mono text-status-danger">{countByStatus("failed")}</CardTitle>
+              <span className="text-2xs text-content-muted">illustrative only</span>
             </div>
           </CardHeader>
         </Card>
@@ -170,12 +191,12 @@ export const JobsPage: React.FC = () => {
             <div>
               <CardTitle className="text-xs">Processing Lifecycle Queue</CardTitle>
               <CardDescription className="text-2xs">
-                Asynchronous task tracking for high-dimensional tensor operations
+                New demo jobs are listed first; seeded sample rows are labeled and are not live processing records.
               </CardDescription>
             </div>
             {/* Filter buttons */}
             <div className="flex items-center gap-1.5 bg-surface-secondary/60 p-1 rounded-lg border border-border-subtle">
-              {(["all", "running", "completed", "failed"] as const).map((tab) => (
+              {(["all", "queued", "running", "completed", "failed"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setFilter(tab)}
@@ -202,6 +223,8 @@ export const JobsPage: React.FC = () => {
                   <span className="font-mono text-xs font-semibold text-content-primary">
                     {job.id}
                   </span>
+                  {job.demo && <Badge variant="warning" size="sm">DEMO</Badge>}
+                  {job.sample && <Badge variant="outline" size="sm">SAMPLE</Badge>}
                   <Badge
                     variant={
                       job.status === "running"
@@ -222,12 +245,14 @@ export const JobsPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-2xs font-mono text-content-muted">
+                  {job.aoiName && <><span>AOI: {job.aoiName}</span><span>•</span></>}
                   <span>Scene: {job.sceneName}</span>
                   <span>•</span>
                   <span>{job.workerNode}</span>
                   <span>•</span>
                   <span>{job.duration}</span>
                 </div>
+                {job.targetSignatureName && <p className="text-2xs text-content-muted">Target signature: {job.targetSignatureName}</p>}
 
                 {/* Progress bar for running jobs */}
                 {job.status === "running" && (
@@ -248,22 +273,31 @@ export const JobsPage: React.FC = () => {
 
               {/* Actions */}
               <div className="flex items-center gap-2 shrink-0">
-                {job.status === "completed" && (
+                {job.status === "completed" && !job.sample && (
                   <Link to="/results">
                     <Button variant="outline" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
                       View Results
                     </Button>
                   </Link>
                 )}
-                {job.status === "failed" && (
+                {job.status === "completed" && job.sample && (
+                  <Badge variant="outline" size="sm">Sample record only · no results</Badge>
+                )}
+                {job.status === "failed" && !job.sample && (
                   <Button variant="outline" size="sm" leftIcon={<RotateCcw className="w-3.5 h-3.5" />}>
                     Retry Job
                   </Button>
                 )}
-                {job.status === "running" && (
+                {job.status === "failed" && job.sample && (
+                  <Badge variant="outline" size="sm">Sample record only</Badge>
+                )}
+                {job.status === "running" && !job.sample && (
                   <Button variant="ghost" size="sm" disabled>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent-primary mr-1" /> Processing
                   </Button>
+                )}
+                {job.status === "running" && job.sample && (
+                  <Badge variant="outline" size="sm">Sample state · no worker</Badge>
                 )}
               </div>
             </div>
