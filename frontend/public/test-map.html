@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MapLibre + OpenFreeMap Liberty Test</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [-102.1, 31.96],
+      zoom: 6
+    });
+    map.on('load', () => console.log('MAP_LOADED_SUCCESS'));
+    map.on('error', (e) => console.error('MAP_ERROR', e));
+    map.on('data', (e) => {
+      if (e.dataType === 'source' && e.isSourceLoaded) {
+        console.log('SOURCE_LOADED:', e.sourceId || e.sourceDataType);
+      }
+    });
+  </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MapLibre + OpenFreeMap Liberty Test</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    maplibregl.setWorkerUrl('/maplibre-gl-worker.mjs');
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [-102.1, 31.96],
+      zoom: 6
+    });
+    map.on('load', () => console.log('MAP_LOADED_SUCCESS'));
+    map.on('error', (e) => console.error('MAP_ERROR', e));
+    map.on('data', (e) => {
+      if (e.dataType === 'source' && e.isSourceLoaded) {
+        console.log('SOURCE_LOADED:', e.sourceId || e.sourceDataType);
+      }
+    });
+  </script>
+</body>
+</html>
+

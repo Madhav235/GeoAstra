@@ -38,7 +38,7 @@ export const GeospatialStudioPage: React.FC = () => {
         {isLeftSidebarOpen && <AOISidebar />}
 
         {/* Center Interactive Map Canvas */}
-        <div className="flex-1 h-full relative overflow-hidden">
+        <div className="flex-1 min-w-0 h-full relative overflow-hidden">
           <MapCanvas />
         </div>
 

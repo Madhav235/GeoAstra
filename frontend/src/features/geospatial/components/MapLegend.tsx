@@ -1,10 +1,11 @@
 /**
  * Map Symbology Legend Component
- * Floating / popover legend describing vector and raster visual layers.
+ * Floating / popover legend describing vector and raster visual layers
+ * with OpenFreeMap attribution.
  */
 
 import React, { useState } from "react";
-import { Info, X, Layers } from "lucide-react";
+import { Info, X, Layers, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const MapLegend: React.FC = () => {
@@ -27,7 +28,7 @@ export const MapLegend: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-64 rounded-lg bg-surface-elevated/95 border border-border-subtle shadow-2xl p-3 z-50 space-y-2.5 backdrop-blur-md">
+        <div className="absolute bottom-full right-0 mb-2 w-72 rounded-lg bg-surface-elevated/95 border border-border-subtle shadow-2xl p-3 z-50 space-y-2.5 backdrop-blur-md">
           <div className="flex items-center justify-between pb-1.5 border-b border-border-subtle">
             <span className="text-2xs font-mono uppercase tracking-wider text-content-primary font-semibold flex items-center gap-1.5">
               <Info className="w-3 h-3 text-accent-primary" />
@@ -80,12 +81,19 @@ export const MapLegend: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-1.5 border-t border-border-subtle text-[10px] text-content-muted leading-tight font-mono">
-            WGS84 Coordinate Reference System (EPSG:4326)
+          {/* OpenFreeMap & Projection Details */}
+          <div className="pt-2 border-t border-border-subtle text-[10px] text-content-muted leading-tight font-mono space-y-1">
+            <div className="flex items-center gap-1 text-accent-primary">
+              <Globe className="w-3 h-3" />
+              <span>Provider: OpenFreeMap (Vector)</span>
+            </div>
+            <div>
+              Map style &copy; <a href="https://openfreemap.org" target="_blank" rel="noreferrer" className="underline hover:text-content-primary">OpenFreeMap</a> &bull; Data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="underline hover:text-content-primary">OpenStreetMap</a>
+            </div>
+            <div>CRS: WGS84 (EPSG:4326)</div>
           </div>
         </div>
       )}
     </div>
   );
 };
-

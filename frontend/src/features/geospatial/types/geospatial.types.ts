@@ -1,20 +1,20 @@
 /**
  * GeoAstra Geospatial Studio Types
- * Comprehensive type definitions for MapLibre GL, Terra Draw, Turf.js,
+ * Comprehensive type definitions for MapLibre GL, OpenFreeMap, Terra Draw, Turf.js,
  * AOIs, Scene Footprints, Basemaps, Layers, and Geocoding.
  */
 
 import { Feature, Polygon, MultiPolygon } from "geojson";
 
-export type BasemapId = "dark" | "streets" | "satellite" | "terrain";
+export type BasemapId = "liberty" | "dark" | "positron" | "bright";
 
 export interface BasemapConfig {
   id: BasemapId;
   name: string;
   attribution: string;
-  tiles: string[];
-  maxZoom: number;
+  styleUrl: string;
   previewColor: string;
+  description: string;
 }
 
 export type DrawingMode = "idle" | "drawing" | "editing";
@@ -83,4 +83,3 @@ export interface MapViewState {
   pitch: number;
   bearing: number;
 }
-

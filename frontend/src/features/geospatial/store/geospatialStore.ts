@@ -131,7 +131,7 @@ export const useGeospatialStore = create<GeospatialState>((set, get) => ({
   selectedAoiId: null,
   selectedSceneId: null,
 
-  activeBasemap: "dark",
+  activeBasemap: "liberty",
   cursorCoords: null,
   currentZoom: 4,
   currentCenter: [-40, 28],

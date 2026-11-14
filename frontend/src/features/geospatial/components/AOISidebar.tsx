@@ -71,7 +71,7 @@ export const AOISidebar: React.FC = () => {
   };
 
   return (
-    <div className="w-80 h-full flex flex-col bg-surface-main/95 border-r border-border-subtle z-20 backdrop-blur-md">
+    <div className="w-80 shrink-0 h-full flex flex-col bg-surface-main/95 border-r border-border-subtle z-20 backdrop-blur-md">
       {/* Sidebar Tab Header */}
       <div className="flex items-center border-b border-border-subtle bg-surface-secondary/50">
         <button

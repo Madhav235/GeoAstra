@@ -64,7 +64,7 @@ export const SelectedFeaturePanel: React.FC = () => {
   };
 
   return (
-    <div className="w-85 h-full flex flex-col bg-surface-main/95 border-l border-border-subtle z-20 backdrop-blur-md">
+    <div className="w-80 shrink-0 h-full flex flex-col bg-surface-main/95 border-l border-border-subtle z-20 backdrop-blur-md">
       {/* Panel Header */}
       <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between bg-surface-secondary/50">
         <div className="flex items-center gap-2">

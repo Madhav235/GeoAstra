@@ -1,16 +1,16 @@
 /**
  * Map Status Bar Component
  * Persistent bottom bar displaying dynamic cursor coordinates, zoom factor,
- * projection datum, drawing status, and symbology legend.
+ * projection datum, OpenFreeMap provider badge, drawing status, and symbology legend.
  */
 
 import React from "react";
 import { useGeospatialStore } from "../store/geospatialStore";
 import { MapLegend } from "./MapLegend";
-import { Crosshair, Compass, PenTool } from "lucide-react";
+import { Crosshair, Compass, PenTool, Globe } from "lucide-react";
 
 export const MapStatusBar: React.FC = () => {
-  const { cursorCoords, currentZoom, drawingMode } = useGeospatialStore();
+  const { cursorCoords, currentZoom, drawingMode, activeBasemap } = useGeospatialStore();
 
   const formatCoord = (val: number, isLat: boolean) => {
     const dir = isLat ? (val >= 0 ? "N" : "S") : val >= 0 ? "E" : "W";
@@ -48,7 +48,7 @@ export const MapStatusBar: React.FC = () => {
         )}
       </div>
 
-      {/* Right: Zoom level, CRS, and Legend */}
+      {/* Right: Zoom level, Provider, CRS, and Legend */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="hidden md:flex items-center gap-1">
           <span className="text-content-muted">ZOOM:</span>
@@ -57,12 +57,20 @@ export const MapStatusBar: React.FC = () => {
 
         <span className="hidden md:inline text-border-subtle">|</span>
 
-        <div className="hidden sm:flex items-center gap-1 text-content-secondary">
-          <Compass className="w-3 h-3 text-accent-primary" />
-          <span>EPSG:4326 (WGS84)</span>
+        <div className="hidden sm:flex items-center gap-1.5 text-content-secondary">
+          <Globe className="w-3 h-3 text-accent-primary" />
+          <span className="text-accent-primary font-semibold">OPENFREEMAP</span>
+          <span className="text-content-muted uppercase">({activeBasemap})</span>
         </div>
 
         <span className="hidden sm:inline text-border-subtle">|</span>
+
+        <div className="hidden lg:flex items-center gap-1 text-content-secondary">
+          <Compass className="w-3 h-3 text-content-muted" />
+          <span>EPSG:4326</span>
+        </div>
+
+        <span className="hidden lg:inline text-border-subtle">|</span>
 
         <MapLegend />
       </div>

@@ -1,55 +1,45 @@
 /**
- * Public Basemap Configurations
- * Public tile servers requiring zero proprietary API keys with proper attribution.
+ * OpenFreeMap Basemap Configurations
+ * Official OpenFreeMap vector styles requiring zero API keys, no tokens, and no registration.
+ * Correct OpenFreeMap & OpenStreetMap attribution included.
  */
 
 import { BasemapConfig, BasemapId } from "../types/geospatial.types";
 
+export const OPENFREEMAP_ATTRIBUTION =
+  '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors';
+
 export const BASEMAPS: Record<BasemapId, BasemapConfig> = {
+  liberty: {
+    id: "liberty",
+    name: "OpenFreeMap Liberty",
+    styleUrl: "https://tiles.openfreemap.org/styles/liberty",
+    attribution: OPENFREEMAP_ATTRIBUTION,
+    previewColor: "#38BDF8",
+    description: "Official OpenFreeMap vector cartography with terrain contours",
+  },
   dark: {
     id: "dark",
-    name: "Dark Matter",
-    attribution: "© OpenStreetMap contributors, © CARTO",
-    tiles: [
-      "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-      "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-      "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-      "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-    ],
-    maxZoom: 19,
+    name: "OpenFreeMap Dark",
+    styleUrl: "https://tiles.openfreemap.org/styles/dark",
+    attribution: OPENFREEMAP_ATTRIBUTION,
     previewColor: "#0F172A",
+    description: "Official OpenFreeMap dark scientific workstation cartography",
   },
-  streets: {
-    id: "streets",
-    name: "OpenStreetMap",
-    attribution: "© OpenStreetMap contributors",
-    tiles: [
-      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    ],
-    maxZoom: 19,
-    previewColor: "#475569",
+  positron: {
+    id: "positron",
+    name: "OpenFreeMap Positron",
+    styleUrl: "https://tiles.openfreemap.org/styles/positron",
+    attribution: OPENFREEMAP_ATTRIBUTION,
+    previewColor: "#E2E8F0",
+    description: "Minimalist light vector basemap",
   },
-  satellite: {
-    id: "satellite",
-    name: "World Imagery",
-    attribution: "Esri, Maxar, Earthstar Geographics, CNES/Airbus DS",
-    tiles: [
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    ],
-    maxZoom: 18,
-    previewColor: "#1E3A8A",
-  },
-  terrain: {
-    id: "terrain",
-    name: "OpenTopoMap",
-    attribution: "© OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap",
-    tiles: [
-      "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-      "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
-      "https://c.tile.opentopomap.org/{z}/{x}/{y}.png",
-    ],
-    maxZoom: 17,
-    previewColor: "#065F46",
+  bright: {
+    id: "bright",
+    name: "OpenFreeMap Bright",
+    styleUrl: "https://tiles.openfreemap.org/styles/bright",
+    attribution: OPENFREEMAP_ATTRIBUTION,
+    previewColor: "#0284C7",
+    description: "High-contrast colorful navigation style",
   },
 };
-
