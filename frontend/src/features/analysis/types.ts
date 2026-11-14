@@ -50,13 +50,31 @@ export interface AnalysisConfiguration {
 
 export interface AnalysisJobRecord {
   id: string;
-  status: "queued";
+  name: string;
+  status: "queued" | "processing" | "completed" | "failed" | "cancelled";
   demo: true;
   submittedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  elapsedSeconds: number;
+  progress: number;
+  currentStage: "queued" | "preparing" | "preprocessing" | "running" | "finalizing" | "completed" | "failed" | "cancelled";
+  failureStage: "queued" | "preparing" | "preprocessing" | "running" | "finalizing" | null;
+  stoppedAtStage: "queued" | "preparing" | "preprocessing" | "running" | "finalizing" | null;
+  failureMessage: string | null;
+  retryOf: string | null;
+  logs: AnalysisJobLog[];
   configuration: AnalysisConfiguration;
   aoiName: string;
   sceneName: string;
   targetSignatureName: string | null;
+}
+
+export interface AnalysisJobLog {
+  timestamp: string;
+  message: string;
 }
 
 export type AnalysisValidationErrors = Partial<Record<

@@ -6,6 +6,7 @@ import { SceneExplorerPage } from "@/features/scenes/SceneExplorerPage";
 import { SpectralLibraryPage } from "@/features/signatures/SpectralLibraryPage";
 import { AnalysisStudioPage } from "@/features/analysis/AnalysisStudioPage";
 import { JobsPage } from "@/features/jobs/JobsPage";
+import { JobDetailPage } from "@/features/jobs/JobDetailPage";
 import { ResultsExplorerPage } from "@/features/results/ResultsExplorerPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { StatusPage } from "@/features/status/StatusPage";
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
       {
         path: "jobs",
         element: <JobsPage />,
+      },
+      {
+        path: "jobs/:jobId",
+        element: <JobDetailPage />,
       },
       {
         path: "results",

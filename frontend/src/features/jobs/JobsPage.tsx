@@ -1,309 +1,246 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Clock3, RotateCcw, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
+import { useToast } from "@/hooks/useToast";
+import { AnalysisJobRecord } from "@/features/analysis/types";
 import { useDemoAnalysisJobStore } from "./store/demoAnalysisJobStore";
-import {
-  ArrowRight,
-  RefreshCw,
-  AlertTriangle,
-  RotateCcw,
-} from "lucide-react";
 
-interface JobItem {
-  id: string;
-  algorithm: string;
-  sceneName: string;
-  status: "running" | "queued" | "completed" | "failed";
-  progress: number;
-  duration: string;
-  workerNode: string;
-  timestamp: string;
-  detectionCount?: number;
-  demo?: boolean;
-  sample?: boolean;
-  aoiName?: string;
-  targetSignatureName?: string | null;
+type JobFilter = "all" | AnalysisJobRecord["status"];
+const FILTERS: JobFilter[] = ["all", "queued", "processing", "completed", "failed", "cancelled"];
+
+function formatElapsed(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const remaining = safe % 60;
+  return [hours, minutes, remaining].map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-const SAMPLE_JOBS: JobItem[] = [
-  {
-    id: "job_rxd_8841a",
-    algorithm: "RXD Anomaly Detection",
-    sceneName: "AVIRIS_NG_PERMIAN_2024_03A",
-    status: "running",
-    progress: 74,
-    duration: "42s elapsed",
-    workerNode: "worker-gpu-01 (NVIDIA A100)",
-    timestamp: "2 mins ago",
-  },
-  {
-    id: "job_mf_9012c",
-    algorithm: "Matched Filter (Methane)",
-    sceneName: "PRISMA_GULF_COAST_L2D_901",
-    status: "queued",
-    progress: 0,
-    duration: "Pending...",
-    workerNode: "Queue Position #1",
-    timestamp: "5 mins ago",
-  },
-  {
-    id: "job_cem_7749b",
-    algorithm: "CEM Target Detection (CH4)",
-    sceneName: "AVIRIS_NG_PERMIAN_2024_03A",
-    status: "completed",
-    progress: 100,
-    duration: "1m 18s",
-    workerNode: "worker-gpu-02",
-    timestamp: "28 mins ago",
-    detectionCount: 18,
-  },
-  {
-    id: "job_fusion_3310",
-    algorithm: "Spectral-Spatial Fusion",
-    sceneName: "EMIT_ALGERIA_MINERAL_22",
-    status: "completed",
-    progress: 100,
-    duration: "2m 04s",
-    workerNode: "worker-gpu-01",
-    timestamp: "3 hours ago",
-    detectionCount: 34,
-  },
-  {
-    id: "job_rxd_6621f",
-    algorithm: "RXD Outlier Search",
-    sceneName: "ENMAP_SALAR_ATACAMA_04",
-    status: "failed",
-    progress: 41,
-    duration: "22s",
-    workerNode: "worker-gpu-03",
-    timestamp: "Yesterday",
-  },
-];
+function statusVariant(status: AnalysisJobRecord["status"]): "warning" | "primary" | "success" | "danger" | "outline" {
+  if (status === "queued") return "warning";
+  if (status === "processing") return "primary";
+  if (status === "completed") return "success";
+  if (status === "failed") return "danger";
+  return "outline";
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString();
+}
 
 export const JobsPage: React.FC = () => {
-  const [filter, setFilter] = useState<"all" | "queued" | "running" | "completed" | "failed">("all");
-  const demoJobs = useDemoAnalysisJobStore((state) => state.jobs);
+  const jobs = useDemoAnalysisJobStore((state) => state.jobs);
+  const cancelJob = useDemoAnalysisJobStore((state) => state.cancelJob);
+  const retryJob = useDemoAnalysisJobStore((state) => state.retryJob);
+  const toast = useToast();
+  const [filter, setFilter] = useState<JobFilter>("all");
+  const [newestFirst, setNewestFirst] = useState(true);
+  const [confirmAction, setConfirmAction] = useState<{ type: "cancel" | "retry"; job: AnalysisJobRecord } | null>(null);
 
-  const submittedJobs: JobItem[] = demoJobs.map((job) => ({
-    id: job.id,
-    algorithm: job.configuration.algorithm.toUpperCase(),
-    sceneName: job.sceneName,
-    status: job.status,
-    progress: 0,
-    duration: "No processing executed",
-    workerNode: "Frontend demo queue",
-    timestamp: new Date(job.submittedAt).toLocaleString(),
-    demo: true,
-    aoiName: job.aoiName,
-    targetSignatureName: job.targetSignatureName,
-  }));
-  const allJobs = [...submittedJobs, ...SAMPLE_JOBS.map((job) => ({ ...job, sample: true }))];
-  const filteredJobs = allJobs.filter((job) => {
-    if (filter === "all") return true;
-    return job.status === filter;
-  });
-  const countByStatus = (status: JobItem["status"]) => SAMPLE_JOBS.filter((job) => job.status === status).length;
+  const counts = useMemo(() => ({
+    all: jobs.length,
+    queued: jobs.filter((job) => job.status === "queued").length,
+    processing: jobs.filter((job) => job.status === "processing").length,
+    completed: jobs.filter((job) => job.status === "completed").length,
+    failed: jobs.filter((job) => job.status === "failed").length,
+    cancelled: jobs.filter((job) => job.status === "cancelled").length,
+  }), [jobs]);
+  const visibleJobs = useMemo(() => jobs
+    .filter((job) => filter === "all" || job.status === filter)
+    .sort((a, b) => (Date.parse(b.submittedAt) - Date.parse(a.submittedAt)) * (newestFirst ? 1 : -1)), [filter, jobs, newestFirst]);
+
+  const confirm = () => {
+    if (!confirmAction) return;
+    try {
+      if (confirmAction.type === "cancel") {
+        if (!cancelJob(confirmAction.job.id)) throw new Error("This job is no longer eligible for cancellation.");
+        toast.success("Demo job cancelled", `${confirmAction.job.id} · simulated cancellation only.`);
+      } else {
+        const retry = retryJob(confirmAction.job.id);
+        toast.success("Demo retry queued", `${retry.id} · copied configuration from the original job.`);
+      }
+      setConfirmAction(null);
+    } catch (error) {
+      toast.error("Job action failed", error instanceof Error ? error.message : "The demo job could not be updated.");
+    }
+  };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Page Header */}
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6 lg:p-8">
       <PageHeader
         category="PIPELINE ORCHESTRATION"
-        title="Analysis Jobs & Queue"
-        subtitle="Review frontend demo job records and illustrative sample entries. No live workers or backend queue are connected."
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge variant="warning" size="md" dot>
-              DEMO JOBS &amp; SAMPLES
-            </Badge>
-          </div>
-        }
+        title="Processing Jobs"
+        subtitle="Track frontend-only demo lifecycle records created by Analysis Studio. No worker or scientific processing is connected."
+        actions={<Badge variant="warning" size="md" dot>DEMO JOBS</Badge>}
       />
 
-      {/* Demo Notice Banner */}
-      <div className="p-3 rounded-lg border border-status-warning/30 bg-status-warning/10 text-xs flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-status-warning shrink-0" />
-          <span className="text-content-secondary">
-            <strong className="text-status-warning font-semibold">Frontend Demo Queue:</strong> Jobs launched from Analysis Studio are persisted mock configuration records. Other rows are illustrative sample records; no worker runs and no analysis output is generated.
-          </span>
-        </div>
+      <div className="flex items-start gap-2 rounded border border-status-warning/30 bg-status-warning/5 p-3 text-xs text-content-secondary">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
+        <p><strong className="text-status-warning">Simulated activity only.</strong> Progress and lifecycle messages are controlled frontend demonstrations; no algorithms execute and no scientific outputs are produced.</p>
       </div>
 
-      {/* Top Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card variant="default">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Running Sample Records
-            </CardDescription>
-            <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-accent-primary">{countByStatus("running")}</CardTitle>
-              <span className="text-2xs text-content-muted">illustrative only</span>
-            </div>
-          </CardHeader>
-        </Card>
-
-        <Card variant="default">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Queued Records
-            </CardDescription>
-            <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-status-warning">{countByStatus("queued") + demoJobs.length}</CardTitle>
-              <span className="text-2xs text-content-muted">{demoJobs.length} local demo job(s)</span>
-            </div>
-          </CardHeader>
-        </Card>
-
-        <Card variant="default">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Completed Sample Records
-            </CardDescription>
-            <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-status-success">{countByStatus("completed")}</CardTitle>
-              <span className="text-2xs text-content-muted">no verified output</span>
-            </div>
-          </CardHeader>
-        </Card>
-
-        <Card variant="default">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-2xs font-mono uppercase tracking-wider">
-              Failed Sample Records
-            </CardDescription>
-            <div className="flex items-baseline gap-2 mt-1">
-              <CardTitle className="text-xl font-bold font-mono text-status-danger">{countByStatus("failed")}</CardTitle>
-              <span className="text-2xs text-content-muted">illustrative only</span>
-            </div>
-          </CardHeader>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {FILTERS.map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilter(status)}
+            className={`rounded border px-3 py-2 text-left transition-colors ${
+              filter === status
+                ? "border-accent-primary/50 bg-accent-primary/10"
+                : "border-border-subtle bg-surface-panel hover:border-border-strong"
+            }`}
+          >
+            <span className="block text-2xs font-mono uppercase tracking-wide text-content-muted">{status} jobs</span>
+            <span className="mt-1 block font-mono text-lg font-semibold text-content-primary">{counts[status]}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Filter Tabs & Job Queue Table */}
       <Card variant="elevated">
-        <CardHeader className="pb-3 border-b border-border-subtle">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-xs">Processing Lifecycle Queue</CardTitle>
-              <CardDescription className="text-2xs">
-                New demo jobs are listed first; seeded sample rows are labeled and are not live processing records.
-              </CardDescription>
-            </div>
-            {/* Filter buttons */}
-            <div className="flex items-center gap-1.5 bg-surface-secondary/60 p-1 rounded-lg border border-border-subtle">
-              {(["all", "queued", "running", "completed", "failed"] as const).map((tab) => (
+        <div className="flex flex-col gap-3 border-b border-border-subtle p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-content-primary">Job queue <span className="ml-1 font-mono text-content-muted">({visibleJobs.length})</span></h2>
+            <p className="mt-1 text-2xs text-content-muted">All rows are loaded from the shared Analysis Studio job store.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1 rounded border border-border-subtle bg-surface-secondary/40 p-1">
+              {FILTERS.map((status) => (
                 <button
-                  key={tab}
-                  onClick={() => setFilter(tab)}
-                  className={`px-2.5 py-1 rounded text-2xs font-mono uppercase tracking-wider transition-colors ${
-                    filter === tab
-                      ? "bg-surface-elevated text-accent-primary font-semibold shadow-sm"
-                      : "text-content-muted hover:text-content-primary"
+                  key={status}
+                  type="button"
+                  aria-pressed={filter === status}
+                  onClick={() => setFilter(status)}
+                  className={`rounded px-2 py-1 text-2xs font-mono uppercase ${
+                    filter === status ? "bg-surface-elevated text-accent-primary" : "text-content-muted hover:text-content-primary"
                   }`}
                 >
-                  {tab}
+                  {status} <span className="text-content-muted">{counts[status]}</span>
                 </button>
               ))}
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0 divide-y divide-border-subtle">
-          {filteredJobs.map((job) => (
-            <div
-              key={job.id}
-              className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-surface-elevated/30 transition-colors"
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNewestFirst((current) => !current)}
+              leftIcon={newestFirst ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />}
+              aria-label={`Sort by submission date, currently ${newestFirst ? "newest first" : "oldest first"}`}
             >
-              <div className="space-y-1 min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-semibold text-content-primary">
-                    {job.id}
-                  </span>
-                  {job.demo && <Badge variant="warning" size="sm">DEMO</Badge>}
-                  {job.sample && <Badge variant="outline" size="sm">SAMPLE</Badge>}
-                  <Badge
-                    variant={
-                      job.status === "running"
-                        ? "primary"
-                        : job.status === "completed"
-                        ? "success"
-                        : job.status === "failed"
-                        ? "danger"
-                        : "warning"
-                    }
-                    size="sm"
-                    dot={job.status === "running"}
-                  >
-                    {job.status.toUpperCase()}
-                  </Badge>
-                  <span className="text-2xs font-mono text-content-secondary">
-                    {job.algorithm}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-2xs font-mono text-content-muted">
-                  {job.aoiName && <><span>AOI: {job.aoiName}</span><span>•</span></>}
-                  <span>Scene: {job.sceneName}</span>
-                  <span>•</span>
-                  <span>{job.workerNode}</span>
-                  <span>•</span>
-                  <span>{job.duration}</span>
-                </div>
-                {job.targetSignatureName && <p className="text-2xs text-content-muted">Target signature: {job.targetSignatureName}</p>}
+              {newestFirst ? "Newest first" : "Oldest first"}
+            </Button>
+          </div>
+        </div>
 
-                {/* Progress bar for running jobs */}
-                {job.status === "running" && (
-                  <div className="pt-1.5 max-w-md">
-                    <div className="flex justify-between text-2xs font-mono text-content-muted mb-1">
-                      <span>Tensor Covariance Inversion</span>
-                      <span className="text-accent-primary font-bold">{job.progress}%</span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full bg-surface-panel overflow-hidden border border-border-subtle">
-                      <div
-                        className="h-full bg-accent-primary rounded-full transition-all duration-300"
-                        style={{ width: `${job.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 shrink-0">
-                {job.status === "completed" && !job.sample && (
-                  <Link to="/results">
-                    <Button variant="outline" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-                      View Results
-                    </Button>
-                  </Link>
-                )}
-                {job.status === "completed" && job.sample && (
-                  <Badge variant="outline" size="sm">Sample record only · no results</Badge>
-                )}
-                {job.status === "failed" && !job.sample && (
-                  <Button variant="outline" size="sm" leftIcon={<RotateCcw className="w-3.5 h-3.5" />}>
-                    Retry Job
-                  </Button>
-                )}
-                {job.status === "failed" && job.sample && (
-                  <Badge variant="outline" size="sm">Sample record only</Badge>
-                )}
-                {job.status === "running" && !job.sample && (
-                  <Button variant="ghost" size="sm" disabled>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-accent-primary mr-1" /> Processing
-                  </Button>
-                )}
-                {job.status === "running" && job.sample && (
-                  <Badge variant="outline" size="sm">Sample state · no worker</Badge>
-                )}
-              </div>
+        {visibleJobs.length === 0 ? (
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <div className="rounded-full border border-border-subtle bg-surface-secondary p-3"><ArrowUpDown className="h-5 w-5 text-content-muted" /></div>
+            <p className="text-sm font-medium text-content-primary">{jobs.length === 0 ? "No demo jobs yet" : `No ${filter} jobs`}</p>
+            <p className="max-w-md text-xs text-content-muted">
+              {jobs.length === 0 ? "Launch a configuration from Analysis Studio to create a simulated job record." : "Choose another status filter to see matching jobs."}
+            </p>
+            {filter !== "all" && <Button variant="outline" size="sm" onClick={() => setFilter("all")}>Clear filter</Button>}
+            {jobs.length === 0 && <Link className="text-xs text-accent-primary hover:underline" to="/analysis/new">Open Analysis Studio</Link>}
+          </CardContent>
+        ) : (
+          <>
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="w-full min-w-[980px] text-left">
+                <thead className="bg-surface-secondary/40 text-2xs font-mono uppercase tracking-wider text-content-muted">
+                  <tr>
+                    <th className="px-4 py-3">Job</th><th className="px-4 py-3">Inputs</th><th className="px-4 py-3">Algorithm</th>
+                    <th className="px-4 py-3">Submitted</th><th className="px-4 py-3">Status / progress</th><th className="px-4 py-3">Elapsed</th><th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {visibleJobs.map((job) => (
+                    <tr key={job.id} className="align-top hover:bg-surface-elevated/20">
+                      <td className="px-4 py-3">
+                        <Link to={`/jobs/${encodeURIComponent(job.id)}`} className="font-mono text-xs font-semibold text-accent-primary hover:underline">{job.id}</Link>
+                        <p className="mt-1 text-xs text-content-primary">{job.name}</p>
+                        <Badge className="mt-1" variant="warning">DEMO</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <p className="text-content-primary">{job.aoiName}</p><p className="mt-1 text-2xs text-content-muted">AOI {job.configuration.aoiId}</p>
+                        <p className="mt-2 text-content-primary">{job.sceneName}</p><p className="mt-1 text-2xs text-content-muted">Scene {job.configuration.sceneId}</p>
+                      </td>
+                      <td className="px-4 py-3 text-xs uppercase text-content-primary">{job.configuration.algorithm}</td>
+                      <td className="px-4 py-3 text-2xs text-content-secondary">{formatDate(job.submittedAt)}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusVariant(job.status)} dot={job.status === "processing"}>{job.status}</Badge>
+                        <div className="mt-2 min-w-32">
+                          <div className="mb-1 flex justify-between text-2xs font-mono text-content-muted"><span>{job.currentStage}</span><span>{job.progress}%</span></div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-accent-primary transition-all" style={{ width: `${job.progress}%` }} /></div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-content-secondary"><Clock3 className="mr-1 inline h-3.5 w-3.5" />{formatElapsed(job.elapsedSeconds)}</td>
+                      <td className="px-4 py-3">
+                        <JobActions job={job} onCancel={() => setConfirmAction({ type: "cancel", job })} onRetry={() => setConfirmAction({ type: "retry", job })} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </CardContent>
+            <div className="divide-y divide-border-subtle lg:hidden">
+              {visibleJobs.map((job) => (
+                <article key={job.id} className="space-y-3 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to={`/jobs/${encodeURIComponent(job.id)}`} className="break-all font-mono text-xs font-semibold text-accent-primary hover:underline">{job.id}</Link>
+                    <Badge variant="warning">DEMO</Badge><Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+                  </div>
+                  <p className="text-sm text-content-primary">{job.name}</p>
+                  <div className="grid grid-cols-2 gap-2 text-2xs">
+                    <JobValue label="AOI" value={job.aoiName} />
+                    <JobValue label="Scene" value={job.sceneName} />
+                    <JobValue label="Algorithm" value={job.configuration.algorithm.toUpperCase()} />
+                    <JobValue label="Elapsed" value={formatElapsed(job.elapsedSeconds)} />
+                    <JobValue label="Submitted" value={formatDate(job.submittedAt)} />
+                    <JobValue label="Progress" value={`${job.progress}% · ${job.currentStage}`} />
+                  </div>
+                  <div className="flex items-center gap-2 text-2xs font-mono text-content-muted"><span>{job.currentStage}</span><span>{job.progress}%</span><div className="h-1.5 min-w-20 flex-1 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-accent-primary transition-all" style={{ width: `${job.progress}%` }} /></div></div>
+                  <JobActions job={job} onCancel={() => setConfirmAction({ type: "cancel", job })} onRetry={() => setConfirmAction({ type: "retry", job })} />
+                </article>
+              ))}
+            </div>
+          </>
+        )}
       </Card>
+
+      <ConfirmDialog
+        isOpen={Boolean(confirmAction)}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={confirm}
+        isDestructive={confirmAction?.type === "cancel"}
+        title={confirmAction?.type === "cancel" ? "Cancel demo job?" : "Retry demo job?"}
+        confirmLabel={confirmAction?.type === "cancel" ? "Confirm cancellation" : "Create retry"}
+        message={confirmAction?.type === "cancel" ? (
+          <p>Cancel <span className="font-mono text-content-primary">{confirmAction.job.id}</span> while it is <strong>{confirmAction.job.status}</strong>? This only stops the simulated lifecycle.</p>
+        ) : (
+          <p>Create a new queued DEMO job using the configuration from <span className="font-mono text-content-primary">{confirmAction?.job.id}</span>? The original job and its history will be preserved.</p>
+        )}
+      />
     </div>
   );
 };
+
+function JobActions({ job, onCancel, onRetry }: { job: AnalysisJobRecord; onCancel: () => void; onRetry: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Link to={`/jobs/${encodeURIComponent(job.id)}`} className="text-xs font-medium text-accent-primary hover:underline">Details</Link>
+      {(job.status === "queued" || job.status === "processing") && (
+        <Button size="xs" variant="ghost" leftIcon={<XCircle className="h-3 w-3" />} onClick={onCancel}>Cancel</Button>
+      )}
+      {(job.status === "failed" || job.status === "cancelled") && (
+        <Button size="xs" variant="outline" leftIcon={<RotateCcw className="h-3 w-3" />} onClick={onRetry}>Retry</Button>
+      )}
+    </div>
+  );
+}
+
+function JobValue({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0"><span className="block uppercase tracking-wide text-content-muted">{label}</span><span className="mt-0.5 block break-words text-content-secondary">{value}</span></div>;
+}

@@ -111,11 +111,28 @@ export function submitMockAnalysis(
     throw new Error(`Invalid demo analysis configuration: ${Object.values(errors).join(" ")}`);
   }
 
+  const submittedAt = new Date().toISOString();
   const job: AnalysisJobRecord = {
     id: createJobId(),
+    name: `${configuration.algorithm.toUpperCase()} analysis`,
     status: "queued",
     demo: true,
-    submittedAt: new Date().toISOString(),
+    submittedAt,
+    startedAt: null,
+    completedAt: null,
+    failedAt: null,
+    cancelledAt: null,
+    elapsedSeconds: 0,
+    progress: 0,
+    currentStage: "queued",
+    failureStage: null,
+    stoppedAtStage: null,
+    failureMessage: null,
+    retryOf: null,
+    logs: [{
+      timestamp: submittedAt,
+      message: "Job accepted into the DEMO queue; no real processing was started.",
+    }],
     configuration,
     ...labels,
   };
