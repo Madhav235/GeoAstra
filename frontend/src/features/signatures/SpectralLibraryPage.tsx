@@ -1,266 +1,353 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Database,
+  Filter,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import {
-  Sparkles,
-  Search,
-  Download,
-  AlertTriangle,
-} from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
+import { useToast } from "@/hooks/useToast";
+import { SignatureCsvImportModal } from "./components/SignatureCsvImportModal";
+import { SignatureDetailModal } from "./components/SignatureDetailModal";
+import { SignatureFormModal } from "./components/SignatureFormModal";
+import { SpectralChart } from "./components/SpectralChart";
+import { PUBLIC_SIGNATURES, SIGNATURE_COLORS } from "./data/mockSignatures";
+import { searchAndFilterSignatures, SignatureFilters } from "./services/signatureService";
+import { getActiveSignature, useSignatureStore } from "./store/signatureStore";
+import { SIGNATURE_CATEGORIES, SpectralSignature } from "./types";
 
-interface SignatureSpec {
-  id: string;
-  name: string;
-  category: "Gas / Emission" | "Vegetation" | "Mineral" | "Water";
-  color: string;
-  source: string;
-  bands: number;
-  diagnosticWavelengths: string;
-  description: string;
-  svgPath: string;
+type CatalogueTab = "public" | "custom";
+type CatalogueView = "all" | CatalogueTab;
+
+function SignatureCard({
+  signature,
+  active,
+  onDetails,
+  onSetActive,
+  onDelete,
+  onCompare,
+  comparing,
+}: {
+  signature: SpectralSignature;
+  active: boolean;
+  onDetails: () => void;
+  onSetActive: () => void;
+  onDelete: () => void;
+  onCompare: () => void;
+  comparing: boolean;
+}) {
+  return (
+    <Card
+      variant="elevated"
+      className={`flex h-full flex-col transition-colors ${active ? "border-accent-primary ring-1 ring-accent-primary/30" : "hover:border-border-strong"}`}
+    >
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="break-words text-sm">{signature.name}</CardTitle>
+            <p className="mt-1 break-all font-mono text-2xs text-content-muted">{signature.id}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Badge variant={signature.designation === "public" ? "primary" : "secondary"} size="sm">
+              {signature.designation === "public" ? "PUBLIC" : "CUSTOM"}
+            </Badge>
+            {active && <Badge variant="success" size="sm">ACTIVE TARGET</Badge>}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col gap-3 pt-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="outline" size="sm">{signature.category}</Badge>
+          <Badge variant="default" size="sm">{signature.sensor}</Badge>
+          <Badge variant="default" size="sm">{signature.wavelengthNm.length} bands</Badge>
+        </div>
+        <p className="line-clamp-3 min-h-[3.6em] text-xs leading-relaxed text-content-secondary">{signature.description}</p>
+        {signature.illustrative && (
+          <p className="flex items-center gap-1 text-2xs text-status-warning">
+            <AlertTriangle className="h-3 w-3 shrink-0" /> Illustrative values; not verified measurements
+          </p>
+        )}
+        <p className="mt-auto border-t border-border-subtle pt-2 text-2xs text-content-muted">
+          {signature.dataSource}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant={active ? "secondary" : "primary"} size="sm" leftIcon={active ? <Check className="h-3.5 w-3.5" /> : undefined} onClick={onSetActive}>
+            {active ? "Active Target" : "Set Active"}
+          </Button>
+          <Button variant={comparing ? "secondary" : "outline"} size="sm" aria-pressed={comparing} onClick={onCompare}>
+            {comparing ? "Comparing" : "Compare"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onDetails}>Details</Button>
+          {signature.designation === "custom" && (
+            <Button variant="ghost" size="icon" aria-label={`Delete ${signature.name}`} title="Delete custom signature" onClick={onDelete}>
+              <Trash2 className="h-4 w-4 text-status-danger" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
-const SAMPLE_SIGNATURES: SignatureSpec[] = [
-  {
-    id: "sig_methane",
-    name: "Methane Absorption (CH4)",
-    category: "Gas / Emission",
-    color: "#F59E0B", // amber
-    source: "HITRAN / JPL Laboratory",
-    bands: 425,
-    diagnosticWavelengths: "1660 nm (2&nu;3) & 2320 nm (&nu;3+&nu;4)",
-    description: "Strong diagnostic overtone absorption bands in SWIR-1 and SWIR-2 used for plume pinpointing.",
-    svgPath: "M 0 70 Q 50 65, 80 40 T 115 20 T 140 75 T 160 30 T 200 78 T 240 35 T 280 40",
-  },
-  {
-    id: "sig_vegetation",
-    name: "Healthy Vegetation (Chlorophyll)",
-    category: "Vegetation",
-    color: "#10B981", // emerald
-    source: "USGS Spectral Library v7",
-    bands: 425,
-    diagnosticWavelengths: "680 nm (Red edge), 1450 nm & 1940 nm (H2O)",
-    description: "Low visible reflectance with sharp red-edge rise at 700 nm, high NIR plateau and liquid water absorption dips.",
-    svgPath: "M 0 75 Q 30 72, 45 40 T 80 15 T 120 18 T 150 55 T 190 25 T 230 65 T 280 45",
-  },
-  {
-    id: "sig_kaolinite",
-    name: "Kaolinite Hydrothermal Clay",
-    category: "Mineral",
-    color: "#38BDF8", // sky
-    source: "USGS Spectral Library v7",
-    bands: 425,
-    diagnosticWavelengths: "2160 nm & 2208 nm (Al-OH doublet)",
-    description: "Diagnostic Al-OH absorption doublet in SWIR used for porphyry copper and epithermal gold alteration mapping.",
-    svgPath: "M 0 50 Q 50 45, 90 35 T 130 30 T 170 30 T 210 25 T 235 60 T 250 65 T 280 40",
-  },
-  {
-    id: "sig_hematite",
-    name: "Hematite (Iron Oxide Fe2O3)",
-    category: "Mineral",
-    color: "#EF4444", // red
-    source: "JPL ECOSTRESS Library",
-    bands: 425,
-    diagnosticWavelengths: "860 nm (Crystal field transition)",
-    description: "Strong ferric iron absorption below 550 nm with crystal field absorption band centered near 860 nm.",
-    svgPath: "M 0 80 Q 40 75, 70 50 T 110 30 T 145 60 T 180 35 T 220 30 T 250 32 T 280 35",
-  },
-];
-
 export const SpectralLibraryPage: React.FC = () => {
-  const [selectedSigId, setSelectedSigId] = useState<string>("sig_methane");
-  const [searchQuery, setSearchQuery] = useState("");
+  const toast = useToast();
+  const customSignatures = useSignatureStore((state) => state.customSignatures);
+  const activeSignatureId = useSignatureStore((state) => state.activeSignatureId);
+  const addCustomSignature = useSignatureStore((state) => state.addCustomSignature);
+  const deleteCustomSignature = useSignatureStore((state) => state.deleteCustomSignature);
+  const setActiveSignature = useSignatureStore((state) => state.setActiveSignature);
+  const [tab, setTab] = useState<CatalogueView>("public");
+  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<SignatureFilters>({
+    category: "all",
+    sensor: "all",
+    designation: "all",
+    sortBy: "name",
+    sortDirection: "asc",
+  });
+  const [detailSignature, setDetailSignature] = useState<SpectralSignature | null>(null);
+  const [deleteSignatureId, setDeleteSignatureId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [comparisonIds, setComparisonIds] = useState<string[]>([]);
 
-  const activeSig =
-    SAMPLE_SIGNATURES.find((s) => s.id === selectedSigId) || SAMPLE_SIGNATURES[0];
+  const allSignatures = useMemo(() => [...customSignatures, ...PUBLIC_SIGNATURES], [customSignatures]);
+  const activeSignature = getActiveSignature(allSignatures, activeSignatureId);
+  const selectedTabSignatures = allSignatures.filter((signature) => tab === "public"
+    ? signature.designation === "public"
+    : tab === "custom" ? signature.designation === "custom" : true);
+  const effectiveFilters = {
+    ...filters,
+    designation: tab === "all" ? filters.designation : tab,
+  };
+  const visibleSignatures = searchAndFilterSignatures(selectedTabSignatures, query, effectiveFilters);
+  const categoryOptions = [...SIGNATURE_CATEGORIES];
+  const sensors = [...new Set(allSignatures.flatMap((signature) => [signature.sensor, ...signature.compatibleSensors]))].sort();
+  const compareSignatures = comparisonIds
+    .map((id) => allSignatures.find((signature) => signature.id === id))
+    .filter((signature): signature is SpectralSignature => !!signature)
+    .slice(0, 3);
+  const chartSignatures = activeSignature
+    ? [activeSignature, ...compareSignatures.filter((signature) => signature.id !== activeSignature.id)].slice(0, 4)
+    : compareSignatures;
+  const deleteSignature = deleteSignatureId
+    ? customSignatures.find((signature) => signature.id === deleteSignatureId) ?? null
+    : null;
 
-  const filteredSignatures = SAMPLE_SIGNATURES.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleCreate = (signature: SpectralSignature) => {
+    addCustomSignature(signature);
+    setActiveSignature(signature.id);
+    setCreateOpen(false);
+    setTab("custom");
+    setFilters((current) => ({ ...current, category: "all", sensor: "all", designation: "all" }));
+    setQuery("");
+    toast.success("Signature created", `${signature.name} is now in My Signatures and is the active target.`);
+  };
+
+  const handleImport = (signature: SpectralSignature) => {
+    addCustomSignature(signature);
+    setActiveSignature(signature.id);
+    setTab("custom");
+    setFilters((current) => ({ ...current, category: "all", sensor: "all", designation: "all" }));
+    setQuery("");
+    toast.success("CSV imported locally", `${signature.name} was added to My Signatures. No file was uploaded.`);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteSignature || deleteSignature.designation !== "custom") return;
+    deleteCustomSignature(deleteSignature.id);
+    setComparisonIds((ids) => ids.filter((id) => id !== deleteSignature.id));
+    if (detailSignature?.id === deleteSignature.id) setDetailSignature(null);
+    toast.success("Signature deleted", `${deleteSignature.name} was removed from My Signatures.`);
+    setDeleteSignatureId(null);
+  };
+
+  const toggleComparison = (signature: SpectralSignature) => {
+    setComparisonIds((current) => {
+      if (current.includes(signature.id)) return current.filter((id) => id !== signature.id);
+      if (current.length >= 3) {
+        toast.warning("Comparison limit", "Compare up to three additional curves with the active target.");
+        return current;
+      }
+      return [...current, signature.id];
+    });
+  };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Page Header */}
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6 lg:p-8">
       <PageHeader
         category="SPECTRAL SIGNATURES"
-        title="Reference Spectral Signature Library"
-        subtitle="Calibrated laboratory and field reflectance spectra (400 nm – 2500 nm) used for matched filtering, material identification, and classification."
+        title="Spectral Library"
+        subtitle="Browse reference curves, create user-provided spectra, and select an active target signature for frontend analysis workflows."
         actions={
-          <div className="flex items-center gap-2">
-            <Badge variant="warning" size="md" dot>
-              SAMPLE REFERENCE LIBRARY
-            </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="primary" size="md">{allSignatures.length} SIGNATURES</Badge>
+            <Button variant="outline" leftIcon={<Upload className="h-4 w-4" />} onClick={() => setImportOpen(true)}>Import CSV</Button>
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>Create Signature</Button>
           </div>
         }
       />
 
-      {/* Demo Notice Banner */}
-      <div className="p-3 rounded-lg border border-status-warning/30 bg-status-warning/10 text-xs flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-status-warning shrink-0" />
-          <span className="text-content-secondary">
-            <strong className="text-status-warning font-semibold">Diagnostic Reference Signatures:</strong> The spectral curves and absorption bands below are curated sample references from USGS and HITRAN databases for algorithm development preview.
-          </span>
-        </div>
+      <div className="flex items-start gap-2 rounded border border-status-warning/25 bg-status-warning/5 p-3 text-xs text-content-secondary">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
+        <p><strong className="text-status-warning">Scientific data notice.</strong> Public example curves are illustrative simulations carrying reference labels; they are not verified spectra or measured reflectance. Custom signatures display the user-provided values.</p>
       </div>
 
-      {/* Large Spectral Chart Card */}
-      <Card variant="elevated">
-        <CardHeader className="pb-3 border-b border-border-subtle">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-accent-primary" />
-                Spectral Reflectance Response: {activeSig.name}
-              </CardTitle>
-              <CardDescription className="text-2xs font-mono">
-                Wavelength Range: 400 nm – 2500 nm (VNIR to SWIR-2) • {activeSig.source}
-              </CardDescription>
+      {activeSignature ? (
+        <Card variant="elevated" className="border-accent-primary/40">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-2xs font-mono uppercase tracking-wider text-accent-primary">ACTIVE TARGET SIGNATURE</p>
+                <CardTitle className="mt-1 text-base">{activeSignature.name}</CardTitle>
+                <p className="mt-1 font-mono text-2xs text-content-muted">{activeSignature.id} · {activeSignature.category} · {activeSignature.sensor}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setDetailSignature(activeSignature)}>View details</Button>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" size="sm">
-                425 CHANNELS
-              </Badge>
-              <Button variant="outline" size="sm" leftIcon={<Download className="w-3.5 h-3.5" />}>
-                Export CSV
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-2xs text-content-muted">
+              <span>Wavelength – Reflectance · X axis in nanometres (nm) · Y axis in {activeSignature.reflectanceUnit}</span>
+              <span>{activeSignature.wavelengthNm.length} spectral samples · {activeSignature.illustrative ? "Illustrative" : "User-provided"}</span>
+            </div>
+            <SpectralChart signatures={chartSignatures} height={350} />
+            {chartSignatures.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {chartSignatures.map((signature, index) => (
+                  <Badge key={signature.id} variant={index === 0 ? "primary" : "outline"} size="sm">
+                    <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: SIGNATURE_COLORS[index % SIGNATURE_COLORS.length] }} />
+                    {index === 0 ? "Active: " : "Compare: "}{signature.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card><CardContent className="p-5 text-sm text-content-muted">Choose an active signature from the catalogue.</CardContent></Card>
+      )}
+
+      <Card variant="elevated">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle pb-3" role="tablist" aria-label="Signature catalogues">
+            <button type="button" role="tab" aria-selected={tab === "public"} onClick={() => setTab("public")} className={`rounded px-3 py-2 text-xs font-medium ${tab === "public" ? "bg-accent-primary/15 text-accent-primary" : "text-content-secondary hover:bg-surface-secondary"}`}>
+              Public Signatures <span className="ml-1 font-mono">{allSignatures.filter((signature) => signature.designation === "public").length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "custom"} onClick={() => setTab("custom")} className={`rounded px-3 py-2 text-xs font-medium ${tab === "custom" ? "bg-accent-primary/15 text-accent-primary" : "text-content-secondary hover:bg-surface-secondary"}`}>
+              My Signatures <span className="ml-1 font-mono">{customSignatures.length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "all"} onClick={() => setTab("all")} className={`rounded px-3 py-2 text-xs font-medium ${tab === "all" ? "bg-accent-primary/15 text-accent-primary" : "text-content-secondary hover:bg-surface-secondary"}`}>
+              All Signatures
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,2fr)_repeat(4,minmax(130px,1fr))]">
+            <Input type="search" aria-label="Search signatures" placeholder="Search signature name, ID, category..." value={query} onChange={(event) => setQuery(event.target.value)} leftIcon={<Search className="h-4 w-4" />} clearable onClear={() => setQuery("")} />
+            <Select aria-label="Filter by category" value={filters.category} onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))} options={[{ value: "all", label: "All categories" }, ...categoryOptions.map((category) => ({ value: category, label: category }))]} />
+            <Select aria-label="Filter by sensor" value={filters.sensor} onChange={(event) => setFilters((current) => ({ ...current, sensor: event.target.value }))} options={[{ value: "all", label: "All sensors" }, ...sensors.map((sensor) => ({ value: sensor, label: sensor }))]} />
+            <Select aria-label="Filter by designation" value={tab === "all" ? filters.designation : tab} onChange={(event) => {
+              const designation = event.target.value as SignatureFilters["designation"];
+              setTab("all");
+              setFilters((current) => ({ ...current, designation }));
+            }} options={[{ value: "all", label: "All designations" }, { value: "public", label: "Public" }, { value: "custom", label: "Custom" }]} />
+            <div className="flex gap-2">
+              <Select aria-label="Sort signatures by" value={filters.sortBy} onChange={(event) => setFilters((current) => ({ ...current, sortBy: event.target.value as SignatureFilters["sortBy"] }))} options={[{ value: "name", label: "Sort: Name" }, { value: "category", label: "Sort: Category" }]} />
+              <Button variant="outline" size="icon" aria-label={`Sort ${filters.sortDirection === "asc" ? "descending" : "ascending"}`} onClick={() => setFilters((current) => ({ ...current, sortDirection: current.sortDirection === "asc" ? "desc" : "asc" }))}>
+                <Filter className="h-4 w-4" />
               </Button>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-5 space-y-4">
-          {/* SVG Spectral Curve Canvas */}
-          <div className="h-64 w-full rounded-lg bg-surface-panel/80 border border-border-subtle p-4 relative flex flex-col justify-between overflow-hidden">
-            {/* Background Grid */}
-            <div className="absolute inset-0 bg-tech-grid opacity-20 pointer-events-none" />
-
-            {/* Absorption Feature Overlay Annotations */}
-            <div className="relative z-10 flex justify-between text-2xs font-mono text-content-muted">
-              <span>0.80 Reflectance</span>
-              <span className="text-accent-primary">VNIR (400-1000nm)</span>
-              <span className="text-status-warning">SWIR-1 (1000-1800nm)</span>
-              <span className="text-indigo-400">SWIR-2 (1800-2500nm)</span>
-            </div>
-
-            {/* SVG Plot */}
-            <div className="relative flex-1 py-2">
-              <svg
-                viewBox="0 0 280 90"
-                className="w-full h-full overflow-visible"
-                preserveAspectRatio="none"
-              >
-                {/* Horizontal reference lines */}
-                <line x1="0" y1="18" x2="280" y2="18" stroke="#1E293B" strokeWidth="1" strokeDasharray="3,3" />
-                <line x1="0" y1="45" x2="280" y2="45" stroke="#1E293B" strokeWidth="1" strokeDasharray="3,3" />
-                <line x1="0" y1="72" x2="280" y2="72" stroke="#1E293B" strokeWidth="1" strokeDasharray="3,3" />
-
-                {/* Render active signature curve */}
-                <path
-                  d={activeSig.svgPath}
-                  fill="none"
-                  stroke={activeSig.color}
-                  strokeWidth="2.5"
-                  className="transition-all duration-300"
-                />
-
-                {/* Absorption Marker pin */}
-                <circle cx="145" cy="74" r="4" fill="#F59E0B" />
-                <line x1="145" y1="10" x2="145" y2="74" stroke="#F59E0B" strokeWidth="1" strokeDasharray="2,2" />
-              </svg>
-            </div>
-
-            {/* X Axis labels */}
-            <div className="relative z-10 flex justify-between text-2xs font-mono text-content-muted border-t border-border-subtle pt-2">
-              <span>400 nm</span>
-              <span>750 nm</span>
-              <span className="text-status-warning font-semibold">1660 nm (CH4)</span>
-              <span>2000 nm</span>
-              <span className="text-status-warning font-semibold">2320 nm (CH4)</span>
-              <span>2500 nm</span>
-            </div>
-          </div>
-
-          {/* Active Signature Detail Banner */}
-          <div className="p-3 rounded-lg bg-surface-secondary/40 border border-border-subtle grid grid-cols-1 md:grid-cols-3 gap-3 text-2xs font-mono">
-            <div>
-              <span className="text-content-muted block">DIAGNOSTIC BANDS:</span>
-              <span className="text-status-warning font-semibold">{activeSig.diagnosticWavelengths}</span>
-            </div>
-            <div>
-              <span className="text-content-muted block">CLASSIFICATION:</span>
-              <span className="text-content-primary">{activeSig.category}</span>
-            </div>
-            <div>
-              <span className="text-content-muted block">SPECTRAL SOURCE:</span>
-              <span className="text-content-primary">{activeSig.source}</span>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-content-muted">
+            <span>Showing <strong className="text-content-primary">{visibleSignatures.length}</strong> of {selectedTabSignatures.length} {tab === "public" ? "public" : "custom"} signatures</span>
+            {(query || filters.category !== "all" || filters.sensor !== "all" || filters.designation !== "all") && (
+              <Button variant="ghost" size="xs" onClick={() => { setQuery(""); setFilters((current) => ({ ...current, category: "all", sensor: "all", designation: "all" })); }}>Clear filters</Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Signature Catalog List */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-content-secondary">
-            Reference Signatures Catalog (Sample Data)
-          </h3>
-          <div className="flex items-center gap-2 max-w-xs w-full">
-            <Input
-              placeholder="Filter signatures..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              leftIcon={<Search className="w-3.5 h-3.5 text-content-muted" />}
-            />
+      {tab === "custom" && customSignatures.length === 0 && !query && filters.category === "all" && filters.sensor === "all" ? (
+        <div className="rounded border border-border-subtle bg-surface-panel px-6 py-12 text-center">
+          <Database className="mx-auto h-8 w-8 text-content-muted" />
+          <h2 className="mt-3 text-base font-semibold text-content-primary">No custom signatures yet</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-content-muted">Create a signature from wavelength and reflectance values, or import a CSV file. Entries are stored in this browser.</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>Import CSV</Button>
+            <Button onClick={() => setCreateOpen(true)}>Create Signature</Button>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredSignatures.map((sig) => {
-            const isSelected = sig.id === selectedSigId;
-            return (
-              <div
-                key={sig.id}
-                onClick={() => setSelectedSigId(sig.id)}
-                className={`p-4 rounded-lg border transition-all cursor-pointer ${
-                  isSelected
-                    ? "bg-surface-elevated/90 border-accent-primary shadow-lg"
-                    : "bg-surface-secondary/50 border-border-subtle hover:border-border-strong"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: sig.color }}
-                    />
-                    <div>
-                      <h4 className="text-xs font-semibold text-content-primary">{sig.name}</h4>
-                      <span className="text-2xs font-mono text-content-muted">{sig.category}</span>
-                    </div>
-                  </div>
-                  {isSelected && (
-                    <Badge variant="primary" size="sm">
-                      ACTIVE
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-2xs text-content-secondary mt-2 leading-relaxed">
-                  {sig.description}
-                </p>
-                <div className="pt-2 mt-2 border-t border-border-subtle flex items-center justify-between text-2xs font-mono text-content-muted">
-                  <span>{sig.source}</span>
-                  <span className="text-accent-primary">{sig.bands} bands</span>
-                </div>
-              </div>
-            );
-          })}
+      ) : visibleSignatures.length === 0 ? (
+        <div className="rounded border border-border-subtle bg-surface-panel px-6 py-12 text-center">
+          <Search className="mx-auto h-8 w-8 text-content-muted" />
+          <h2 className="mt-3 text-base font-semibold text-content-primary">No signatures found</h2>
+          <p className="mt-1 text-sm text-content-muted">Change the search or filters to see matching signatures.</p>
+          <Button className="mt-3" variant="outline" onClick={() => { setQuery(""); setFilters((current) => ({ ...current, category: "all", sensor: "all", designation: "all" })); }}>Clear filters</Button>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleSignatures.map((signature) => (
+            <SignatureCard
+              key={signature.id}
+              signature={signature}
+              active={signature.id === activeSignatureId}
+              onDetails={() => setDetailSignature(signature)}
+              onSetActive={() => {
+                setActiveSignature(signature.id);
+                toast.success("Active target updated", `${signature.name} is now available in Analysis Studio.`);
+              }}
+              onDelete={() => setDeleteSignatureId(signature.id)}
+              comparing={comparisonIds.includes(signature.id)}
+              onCompare={() => toggleComparison(signature)}
+            />
+          ))}
+        </div>
+      )}
+
+      <SignatureFormModal isOpen={createOpen} onClose={() => setCreateOpen(false)} onCreate={handleCreate} />
+      <SignatureCsvImportModal isOpen={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />
+      <SignatureDetailModal
+        signature={detailSignature}
+        active={detailSignature?.id === activeSignatureId}
+        compare={!!detailSignature && comparisonIds.includes(detailSignature.id)}
+        onClose={() => setDetailSignature(null)}
+        onSetActive={() => {
+          if (!detailSignature) return;
+          setActiveSignature(detailSignature.id);
+          toast.success("Active target updated", `${detailSignature.name} is now available in Analysis Studio.`);
+        }}
+        onToggleCompare={() => detailSignature && toggleComparison(detailSignature)}
+        onDelete={() => {
+          if (!detailSignature || detailSignature.designation !== "custom") return;
+          setDeleteSignatureId(detailSignature.id);
+          setDetailSignature(null);
+        }}
+      />
+      <Modal
+        isOpen={!!deleteSignature}
+        onClose={() => setDeleteSignatureId(null)}
+        title="Delete Custom Signature?"
+        description="This removes the custom signature from this browser’s local library."
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeleteSignatureId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDelete}>Delete Signature</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-content-secondary">Confirm deletion of <strong className="text-content-primary">{deleteSignature?.name}</strong>?</p>
+        <p className="mt-2 text-xs text-content-muted">Public reference signatures cannot be deleted.</p>
+      </Modal>
     </div>
   );
 };

@@ -7,6 +7,8 @@ import { Select } from "@/components/ui/Select";
 import { useToast } from "@/hooks/useToast";
 import { BUILT_IN_SCENES } from "@/features/scenes/data/sceneCatalog";
 import { useSceneCatalogStore } from "@/features/scenes/store/sceneCatalogStore";
+import { listSignatures } from "@/features/signatures/services/signatureService";
+import { useSignatureStore } from "@/features/signatures/store/signatureStore";
 import {
   Activity,
   Sliders,
@@ -87,6 +89,11 @@ export const AnalysisStudioPage: React.FC = () => {
   const [threshold, setThreshold] = useState(0.85);
   const uploadedScenes = useSceneCatalogStore((state) => state.uploadedScenes);
   const selectedSceneIds = useSceneCatalogStore((state) => state.selectedSceneIds);
+  const customSignatures = useSignatureStore((state) => state.customSignatures);
+  const activeSignatureId = useSignatureStore((state) => state.activeSignatureId);
+  const setActiveSignature = useSignatureStore((state) => state.setActiveSignature);
+  const signatures = listSignatures(customSignatures);
+  const activeSignature = signatures.find((signature) => signature.id === activeSignatureId) ?? null;
   const catalogueScenes = [...uploadedScenes, ...BUILT_IN_SCENES];
   const selectedCatalogueScene = catalogueScenes.find((scene) => selectedSceneIds.includes(scene.id));
   const activeScene = catalogueScenes.find((scene) => scene.name === selectedScene);
@@ -248,6 +255,36 @@ export const AnalysisStudioPage: React.FC = () => {
 
               {/* Parameters List */}
               <div className="pt-2 border-t border-border-subtle space-y-2">
+                <div className="rounded border border-accent-primary/30 bg-accent-primary/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-2xs font-mono uppercase tracking-wider text-accent-primary">
+                      Shared Active Target Signature
+                    </span>
+                    <Badge variant={activeSignature?.designation === "custom" ? "secondary" : "primary"} size="sm">
+                      {activeSignature?.designation === "custom" ? "CUSTOM" : "PUBLIC"}
+                    </Badge>
+                  </div>
+                  <Select
+                    aria-label="Analysis target signature"
+                    value={activeSignature?.id ?? ""}
+                    onChange={(event) => setActiveSignature(event.target.value)}
+                    options={signatures.map((signature) => ({
+                      value: signature.id,
+                      label: `${signature.name} · ${signature.designation}`,
+                    }))}
+                  />
+                  {activeSignature ? (
+                    <p className="text-2xs text-content-muted">
+                      {activeSignature.id} · {activeSignature.wavelengthNm.length} samples · {activeSignature.sensor}
+                      {activeSignature.illustrative ? " · illustrative values" : " · user-provided values"}
+                    </p>
+                  ) : (
+                    <p className="text-2xs text-status-warning">Select a signature in the Spectral Library to share it with analysis.</p>
+                  )}
+                  <p className="text-2xs text-content-muted">
+                    Frontend selection only. MF, CEM, and Score Fusion execution is not implemented here.
+                  </p>
+                </div>
                 <span className="text-2xs font-mono uppercase tracking-wider text-content-muted block">
                   Algorithm Parameters
                 </span>
@@ -255,7 +292,11 @@ export const AnalysisStudioPage: React.FC = () => {
                   {selectedAlgo.params.map((p, idx) => (
                     <div key={idx} className="p-2.5 rounded bg-surface-secondary/50 border border-border-subtle">
                       <span className="text-content-muted block">{p.name}</span>
-                      <span className="text-content-primary font-semibold">{p.defaultVal}</span>
+                      <span className="text-content-primary font-semibold">
+                        {["Reference Target", "Target Vector (d)"].includes(p.name)
+                          ? activeSignature?.name ?? "No active signature selected"
+                          : p.defaultVal}
+                      </span>
                     </div>
                   ))}
                 </div>
