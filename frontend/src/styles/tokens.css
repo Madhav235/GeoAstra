@@ -1,0 +1,44 @@
+/**
+ * GeoAstra Design Tokens — Centralized CSS Custom Properties
+ * Dark-first scientific workstation palette.
+ */
+:root {
+  /* Surfaces */
+  --color-surface-main: #0b1220;
+  --color-surface-secondary: #101b2d;
+  --color-surface-panel: #142235;
+  --color-surface-elevated: #192b40;
+  --color-surface-hover: #1f344f;
+  --color-surface-active: #253d5c;
+
+  /* Borders */
+  --color-border-subtle: #26364a;
+  --color-border-muted: #1e2c3d;
+  --color-border-strong: #3b4e66;
+  --color-border-accent: #38bdf8;
+
+  /* Accents */
+  --color-accent-primary: #38bdf8;
+  --color-accent-primary-hover: #0ea5e9;
+  --color-accent-secondary: #818cf8;
+  --color-accent-secondary-hover: #6366f1;
+  --color-accent-muted: rgba(56, 189, 248, 0.12);
+
+  /* Status */
+  --color-status-success: #4ade80;
+  --color-status-warning: #fbbf24;
+  --color-status-danger: #f87171;
+  --color-status-info: #38bdf8;
+
+  /* Text & Content */
+  --color-content-primary: #f1f5f9;
+  --color-content-secondary: #94a3b8;
+  --color-content-muted: #64748b;
+  --color-content-disabled: #475569;
+
+  /* Dimensions */
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 64px;
+  --topnav-height: 52px;
+}
+
