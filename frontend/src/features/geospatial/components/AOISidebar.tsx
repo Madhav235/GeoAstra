@@ -15,6 +15,7 @@ import {
   Plus,
   Trash2,
   Edit2,
+  PenTool,
   Navigation,
   Search,
   RotateCcw,
@@ -32,6 +33,7 @@ export const AOISidebar: React.FC = () => {
     selectScene,
     deleteAOI,
     setEditingAoiId,
+    startAOIGeometryEdit,
     setDrawingMode,
     activeLeftTab,
     setActiveLeftTab,
@@ -211,6 +213,19 @@ export const AOISidebar: React.FC = () => {
                         title="Zoom to AOI"
                       >
                         <Navigation className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Edit ${aoi.properties.name} geometry`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startAOIGeometryEdit(aoi.properties.id);
+                          fitBounds(aoi.properties.bbox, 60);
+                        }}
+                        className="p-1 rounded text-content-muted hover:text-accent-primary transition-colors"
+                        title="Edit AOI geometry"
+                      >
+                        <PenTool className="w-3 h-3" />
                       </button>
                       <button
                         type="button"

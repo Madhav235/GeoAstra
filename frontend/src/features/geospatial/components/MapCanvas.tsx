@@ -22,11 +22,35 @@ if (typeof window !== "undefined") {
   maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 }
 
+function createPopupContent(title: string, titleClassName: string, details: string[]): HTMLElement {
+  const content = document.createElement("div");
+  content.className = "p-2 space-y-1 font-sans text-xs bg-slate-900 text-slate-100 rounded";
+
+  const heading = document.createElement("div");
+  heading.className = `font-semibold ${titleClassName}`;
+  heading.textContent = title;
+  content.appendChild(heading);
+
+  details.forEach((detail) => {
+    const row = document.createElement("div");
+    row.className = "text-[11px] text-slate-400";
+    row.textContent = detail;
+    content.appendChild(row);
+  });
+
+  return content;
+}
+
 export const MapCanvas: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const terraDrawRef = useRef<TerraDraw | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const geometryEditFeatureIdRef = useRef<string | null>(null);
+  const geometryEditAoiIdRef = useRef<string | null>(null);
+  const terraDrawReadyRef = useRef(false);
+  const layerInteractionsBoundRef = useRef(false);
+  const hasFittedInitialViewRef = useRef(false);
 
   const {
     aois,
@@ -38,10 +62,12 @@ export const MapCanvas: React.FC = () => {
     activeBasemap,
     layers,
     drawingMode,
+    geometryEditingAoiId,
     setDrawingMode,
     setCursorCoords,
     setZoom,
     setPendingFeatureForModal,
+    setGeometryEditDraft,
   } = useGeospatialStore();
 
   // Keep references to state values for event callbacks
@@ -61,8 +87,6 @@ export const MapCanvas: React.FC = () => {
 
   // Helper to re-add all custom GeoJSON vector layers & event handlers onto the active style
   const syncCustomLayers = (map: maplibregl.Map) => {
-    if (!map.isStyleLoaded()) return;
-
     // 1. Scene footprints source & layers
     if (!map.getSource("scenes-source")) {
       map.addSource("scenes-source", {
@@ -209,19 +233,93 @@ export const MapCanvas: React.FC = () => {
       });
     }
 
-    // Interactive pointer styling
-    map.on("mouseenter", "aois-fill", () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", "aois-fill", () => {
-      map.getCanvas().style.cursor = "";
-    });
-    map.on("mouseenter", "scenes-fill", () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", "scenes-fill", () => {
-      map.getCanvas().style.cursor = "";
-    });
+    if (!layerInteractionsBoundRef.current) {
+      map.on("mouseenter", "aois-fill", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "aois-fill", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      map.on("mouseenter", "scenes-fill", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "scenes-fill", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      layerInteractionsBoundRef.current = true;
+    }
+  };
+
+  const syncDrawingState = (draw: TerraDraw) => {
+    const state = useGeospatialStore.getState();
+    const editingId = state.geometryEditingAoiId;
+
+    try {
+      if (editingId) {
+        const aoi = state.aois.find((feature) => feature.properties.id === editingId);
+        if (!aoi) {
+          console.error(`Cannot edit missing AOI geometry: ${editingId}`);
+          return;
+        }
+
+        if (aoi.geometry.type !== "Polygon") {
+          console.error(`Terra Draw can only edit Polygon geometry: ${editingId}`);
+          return;
+        }
+
+        const currentFeatureId = geometryEditFeatureIdRef.current;
+        if (
+          geometryEditAoiIdRef.current !== editingId ||
+          !currentFeatureId ||
+          !draw.hasFeature(currentFeatureId)
+        ) {
+          if (currentFeatureId && draw.hasFeature(currentFeatureId)) {
+            draw.removeFeatures([currentFeatureId]);
+          }
+
+          const featureId = String(draw.getFeatureId());
+          const result = draw.addFeatures([
+            {
+              type: "Feature",
+              id: featureId,
+              geometry: aoi.geometry,
+              properties: {
+                mode: "polygon",
+                name: aoi.properties.name,
+                color: aoi.properties.color,
+              },
+            },
+          ]);
+
+          if (!draw.hasFeature(featureId)) {
+            const reason = result.find((validation) => !validation.valid)?.reason;
+            console.error(
+              `Failed to load AOI geometry for editing: ${editingId}${reason ? ` (${reason})` : ""}`
+            );
+            return;
+          }
+
+          geometryEditFeatureIdRef.current = featureId;
+          geometryEditAoiIdRef.current = editingId;
+        }
+
+        const featureId = geometryEditFeatureIdRef.current;
+        if (!featureId) return;
+        draw.setMode("select");
+        draw.selectFeature(featureId);
+        return;
+      }
+
+      const previousId = geometryEditFeatureIdRef.current;
+      if (previousId && draw.hasFeature(previousId)) {
+        draw.removeFeatures([previousId]);
+      }
+      geometryEditFeatureIdRef.current = null;
+      geometryEditAoiIdRef.current = null;
+      draw.setMode(state.drawingMode === "drawing" ? "polygon" : "render");
+    } catch (err) {
+      console.error("Failed to synchronize AOI drawing state:", err);
+    }
   };
 
   // Helper to re-attach TerraDraw on style load
@@ -260,11 +358,40 @@ export const MapCanvas: React.FC = () => {
         ],
       });
 
-      draw.start();
-      terraDrawRef.current = draw;
-      setTerraDrawInstance(draw);
+      terraDrawReadyRef.current = false;
+      draw.on("change", (ids) => {
+        const editingId = useGeospatialStore.getState().geometryEditingAoiId;
+        const featureId = geometryEditFeatureIdRef.current;
+        if (!editingId || !featureId || !ids.some((id) => String(id) === featureId)) return;
+
+        const edited = draw.getSnapshotFeature(featureId);
+        if (
+          edited &&
+          edited.geometry.type === "Polygon" &&
+          validatePolygonGeometry(edited as any).valid
+        ) {
+          setGeometryEditDraft(edited.geometry);
+        }
+      });
 
       draw.on("finish", (id) => {
+        const state = useGeospatialStore.getState();
+        if (state.drawingMode !== "drawing") {
+          const featureId = geometryEditFeatureIdRef.current;
+          if (state.geometryEditingAoiId && featureId && String(id) === featureId) {
+            const edited = draw.getSnapshotFeature(featureId);
+            if (edited?.geometry.type === "Polygon") {
+              const validation = validatePolygonGeometry({
+                type: "Feature",
+                geometry: edited.geometry,
+                properties: {},
+              });
+              if (validation.valid) setGeometryEditDraft(edited.geometry);
+            }
+          }
+          return;
+        }
+
         const snapshot = draw.getSnapshot();
         const created = snapshot.find((f) => f.id === id);
 
@@ -279,6 +406,13 @@ export const MapCanvas: React.FC = () => {
         draw.clear();
         setDrawingMode("idle");
       });
+      draw.on("ready", () => {
+        terraDrawReadyRef.current = true;
+        syncDrawingState(draw);
+      });
+      draw.start();
+      terraDrawRef.current = draw;
+      setTerraDrawInstance(draw);
     } catch (err) {
       console.error("Failed to initialize Terra Draw with OpenFreeMap style:", err);
     }
@@ -295,7 +429,7 @@ export const MapCanvas: React.FC = () => {
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: initialStyleUrl,
-      center: [-40, 25],
+      center: [-48, 8],
       zoom: 3.5,
       pitch: 0,
       bearing: 0,
@@ -324,6 +458,9 @@ export const MapCanvas: React.FC = () => {
     mapRef.current = map;
     setMapInstance(map);
 
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(mapContainerRef.current);
+
     map.on("error", (e: any) => {
       console.error("MapLibre GL Error:", e.error || e);
     });
@@ -346,6 +483,8 @@ export const MapCanvas: React.FC = () => {
 
     // Feature Click Listeners
     map.on("click", "aois-fill", (e: any) => {
+      if (useGeospatialStore.getState().drawingMode !== "idle") return;
+
       if (e.features && e.features[0]) {
         const feature = e.features[0];
         const id = feature.properties?.id;
@@ -354,14 +493,15 @@ export const MapCanvas: React.FC = () => {
           if (popupRef.current) popupRef.current.remove();
           popupRef.current = new maplibregl.Popup({ closeButton: true, className: "geoastra-popup" })
             .setLngLat(e.lngLat)
-            .setHTML(
-              `<div class="p-2 space-y-1 font-sans text-xs bg-slate-900 text-slate-100 rounded">
-                <div class="font-semibold text-amber-400 flex items-center gap-1.5">
-                  <span>${feature.properties?.name}</span>
-                </div>
-                <div class="text-[11px] text-slate-400">Area: <strong class="text-slate-200">${feature.properties?.areaKm2} km²</strong></div>
-                <div class="text-[10px] text-slate-500 font-mono">${feature.properties?.crs}</div>
-              </div>`
+            .setDOMContent(
+              createPopupContent(
+                String(feature.properties?.name ?? "Area of Interest"),
+                "text-amber-400",
+                [
+                  `Area: ${String(feature.properties?.areaKm2 ?? "—")} km²`,
+                  String(feature.properties?.crs ?? ""),
+                ]
+              )
             )
             .addTo(map);
         }
@@ -369,6 +509,8 @@ export const MapCanvas: React.FC = () => {
     });
 
     map.on("click", "scenes-fill", (e: any) => {
+      if (useGeospatialStore.getState().drawingMode !== "idle") return;
+
       const aoiFeatures = map.queryRenderedFeatures(e.point, { layers: ["aois-fill"] });
       if (aoiFeatures && aoiFeatures.length > 0) return;
 
@@ -380,14 +522,15 @@ export const MapCanvas: React.FC = () => {
           if (popupRef.current) popupRef.current.remove();
           popupRef.current = new maplibregl.Popup({ closeButton: true, className: "geoastra-popup" })
             .setLngLat(e.lngLat)
-            .setHTML(
-              `<div class="p-2 space-y-1 font-sans text-xs bg-slate-900 text-slate-100 rounded">
-                <div class="font-semibold text-sky-400 flex items-center gap-1.5 font-mono">
-                  <span>${feature.properties?.name}</span>
-                </div>
-                <div class="text-[11px] text-slate-400">${feature.properties?.satellite} (${feature.properties?.spatialResolution})</div>
-                <div class="text-[10px] text-slate-400 font-mono">${feature.properties?.bandsCount} Bands • ${feature.properties?.spectralRange}</div>
-              </div>`
+            .setDOMContent(
+              createPopupContent(
+                String(feature.properties?.name ?? "Scene Footprint"),
+                "text-sky-400 font-mono",
+                [
+                  `${String(feature.properties?.satellite ?? "")} (${String(feature.properties?.spatialResolution ?? "")})`,
+                  `${String(feature.properties?.bandsCount ?? "")} Bands • ${String(feature.properties?.spectralRange ?? "")}`,
+                ]
+              )
             )
             .addTo(map);
         }
@@ -397,6 +540,33 @@ export const MapCanvas: React.FC = () => {
     // On initial map load
     map.on("load", () => {
       map.resize();
+      if (hasFittedInitialViewRef.current) return;
+
+      const features = aoisRef.current;
+      if (features.length > 0) {
+        const bounds = features.reduce(
+          (extent, feature) => {
+            const [west, south, east, north] = feature.properties.bbox;
+            return [
+              Math.min(extent[0], west),
+              Math.min(extent[1], south),
+              Math.max(extent[2], east),
+              Math.max(extent[3], north),
+            ] as [number, number, number, number];
+          },
+          [Infinity, Infinity, -Infinity, -Infinity] as [number, number, number, number]
+        );
+        map.fitBounds(
+          [
+            [bounds[0], bounds[1]],
+            [bounds[2], bounds[3]],
+          ],
+          { padding: 48, maxZoom: 4, duration: 0 }
+        );
+      } else {
+        map.jumpTo({ center: [-98.5, 39.8], zoom: 3.5 });
+      }
+      hasFittedInitialViewRef.current = true;
     });
 
     // On style load (fires on initial load and every subsequent setStyle call)
@@ -407,11 +577,14 @@ export const MapCanvas: React.FC = () => {
     });
 
     return () => {
+      resizeObserver.disconnect();
+      popupRef.current?.remove();
       if (terraDrawRef.current) {
         try {
           terraDrawRef.current.stop();
         } catch {}
       }
+      terraDrawReadyRef.current = false;
       map.remove();
       setMapInstance(null);
       setTerraDrawInstance(null);
@@ -531,20 +704,13 @@ export const MapCanvas: React.FC = () => {
   // Sync Terra Draw Mode
   useEffect(() => {
     const draw = terraDrawRef.current;
-    if (!draw) return;
-
-    try {
-      if (drawingMode === "drawing") {
-        draw.setMode("polygon");
-      } else if (drawingMode === "editing") {
-        draw.setMode("select");
-      } else {
-        draw.setMode("render");
-      }
-    } catch (err) {
-      console.warn("Could not set Terra Draw mode:", err);
+    if (!draw || !terraDrawReadyRef.current) return;
+    if (drawingMode !== "idle") {
+      popupRef.current?.remove();
+      popupRef.current = null;
     }
-  }, [drawingMode]);
+    syncDrawingState(draw);
+  }, [drawingMode, geometryEditingAoiId]);
 
   return (
     <div className="relative w-full h-full min-h-[400px] overflow-hidden bg-surface-main">

@@ -41,26 +41,41 @@ export function useMapInstance() {
   }, []);
 
   const fitBounds = useCallback((bbox: [number, number, number, number], padding = 50) => {
-    if (activeMapInstance) {
-      activeMapInstance.fitBounds(
-        [
-          [bbox[0], bbox[1]],
-          [bbox[2], bbox[3]],
-        ],
-        {
-          padding: { top: padding, bottom: padding, left: padding, right: padding },
-          maxZoom: 14,
-          duration: 1200,
-        }
-      );
-    }
+    const map = activeMapInstance;
+    if (!map) return;
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (activeMapInstance !== map) return;
+        map.resize();
+        const { width, height } = map.getContainer().getBoundingClientRect();
+        const horizontalPadding = Math.min(padding, Math.max(0, (width - 24) / 2));
+        const verticalPadding = Math.min(padding, Math.max(0, (height - 24) / 2));
+        map.fitBounds(
+          [
+            [bbox[0], bbox[1]],
+            [bbox[2], bbox[3]],
+          ],
+          {
+            padding: {
+              top: verticalPadding,
+              bottom: verticalPadding,
+              left: horizontalPadding,
+              right: horizontalPadding,
+            },
+            maxZoom: 14,
+            duration: 1200,
+          }
+        );
+      });
+    });
   }, []);
 
   const resetView = useCallback(() => {
     if (activeMapInstance) {
       activeMapInstance.flyTo({
-        center: [-40, 28],
-        zoom: 3.5,
+        center: [-48, 8],
+        zoom: 2.2,
         pitch: 0,
         bearing: 0,
         duration: 1000,

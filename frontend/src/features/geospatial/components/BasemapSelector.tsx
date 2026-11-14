@@ -42,7 +42,7 @@ export const BasemapSelector: React.FC = () => {
       >
         <Globe className="w-3.5 h-3.5 text-accent-primary shrink-0" />
         <span className="hidden sm:inline text-content-secondary">Provider:</span>
-        <span className="font-semibold text-content-primary">{current.name}</span>
+        <span className="hidden sm:inline font-semibold text-content-primary">{current.name}</span>
         <ChevronDown className="w-3 h-3 text-content-muted ml-0.5" />
       </button>
 

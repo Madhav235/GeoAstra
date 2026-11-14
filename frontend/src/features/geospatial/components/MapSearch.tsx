@@ -79,7 +79,7 @@ export const MapSearch: React.FC = () => {
   };
 
   return (
-    <div className="relative w-64 sm:w-80" ref={containerRef}>
+    <div className="relative w-40 sm:w-64" ref={containerRef}>
       <div className="relative flex items-center">
         <Search className="w-3.5 h-3.5 text-content-muted absolute left-3 pointer-events-none" />
         <input
@@ -92,7 +92,7 @@ export const MapSearch: React.FC = () => {
           onFocus={() => setIsOpen(true)}
           placeholder="Search place or Lat, Lon..."
           className={cn(
-            "w-full h-8 pl-8.5 pr-8 bg-surface-elevated/90 border border-border-subtle rounded-md",
+            "w-full h-8 pl-9 pr-8 bg-surface-elevated/90 border border-border-subtle rounded-md",
             "text-xs text-content-primary placeholder:text-content-muted",
             "focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary",
             "transition-colors"
@@ -200,4 +200,3 @@ export const MapSearch: React.FC = () => {
     </div>
   );
 };
-

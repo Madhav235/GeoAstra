@@ -25,7 +25,7 @@ function loadSavedAOIs(): AOIFeature[] {
     const raw = localStorage.getItem(AOI_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -68,6 +68,8 @@ export interface GeospatialState {
   // Pending Modal Action (for saving freshly drawn polygon)
   pendingFeatureForModal: Feature<Polygon | MultiPolygon> | null;
   editingAoiId: string | null;
+  geometryEditingAoiId: string | null;
+  geometryEditDraft: Polygon | MultiPolygon | null;
 
   // Actions
   addAOI: (aoi: AOIFeature) => void;
@@ -92,6 +94,10 @@ export interface GeospatialState {
   setCenter: (center: [number, number]) => void;
   setPendingFeatureForModal: (feature: Feature<Polygon | MultiPolygon> | null) => void;
   setEditingAoiId: (id: string | null) => void;
+  startAOIGeometryEdit: (id: string) => void;
+  setGeometryEditDraft: (geometry: Polygon | MultiPolygon) => void;
+  saveAOIGeometryEdit: () => void;
+  cancelAOIGeometryEdit: () => void;
   resetAOIsToDefault: () => void;
 }
 
@@ -134,17 +140,19 @@ export const useGeospatialStore = create<GeospatialState>((set, get) => ({
   activeBasemap: "liberty",
   cursorCoords: null,
   currentZoom: 4,
-  currentCenter: [-40, 28],
+  currentCenter: [-48, 8],
 
   layers: DEFAULT_LAYERS,
 
   drawingMode: "idle",
-  isLeftSidebarOpen: true,
-  isRightPanelOpen: true,
+  isLeftSidebarOpen: typeof window === "undefined" || window.innerWidth >= 900,
+  isRightPanelOpen: false,
   activeLeftTab: "aois",
 
   pendingFeatureForModal: null,
   editingAoiId: null,
+  geometryEditingAoiId: null,
+  geometryEditDraft: null,
 
   addAOI: (aoi: AOIFeature) => {
     const current = get().aois;
@@ -203,6 +211,9 @@ export const useGeospatialStore = create<GeospatialState>((set, get) => ({
     set((state) => ({
       aois: updated,
       selectedAoiId: state.selectedAoiId === id ? null : state.selectedAoiId,
+      geometryEditingAoiId: state.geometryEditingAoiId === id ? null : state.geometryEditingAoiId,
+      geometryEditDraft: state.geometryEditingAoiId === id ? null : state.geometryEditDraft,
+      drawingMode: state.geometryEditingAoiId === id ? "idle" : state.drawingMode,
     }));
   },
 
@@ -293,13 +304,53 @@ export const useGeospatialStore = create<GeospatialState>((set, get) => ({
     set({ editingAoiId });
   },
 
+  startAOIGeometryEdit: (id) => {
+    if (!get().aois.some((aoi) => aoi.properties.id === id)) return;
+    set({
+      geometryEditingAoiId: id,
+      geometryEditDraft: null,
+      drawingMode: "editing",
+      selectedAoiId: id,
+      selectedSceneId: null,
+      isRightPanelOpen: true,
+      editingAoiId: null,
+      pendingFeatureForModal: null,
+    });
+  },
+
+  setGeometryEditDraft: (geometryEditDraft) => {
+    set({ geometryEditDraft });
+  },
+
+  saveAOIGeometryEdit: () => {
+    const { geometryEditingAoiId, geometryEditDraft } = get();
+    if (geometryEditingAoiId && geometryEditDraft) {
+      get().updateAOI(geometryEditingAoiId, {}, geometryEditDraft);
+    }
+    set({
+      geometryEditingAoiId: null,
+      geometryEditDraft: null,
+      drawingMode: "idle",
+    });
+  },
+
+  cancelAOIGeometryEdit: () => {
+    set({
+      geometryEditingAoiId: null,
+      geometryEditDraft: null,
+      drawingMode: "idle",
+    });
+  },
+
   resetAOIsToDefault: () => {
     persistAOIs(INITIAL_MOCK_AOIS);
     set({
       aois: INITIAL_MOCK_AOIS,
       selectedAoiId: null,
       selectedSceneId: null,
+      geometryEditingAoiId: null,
+      geometryEditDraft: null,
+      drawingMode: "idle",
     });
   },
 }));
-

@@ -25,6 +25,9 @@ export const MapToolbar: React.FC = () => {
   const {
     drawingMode,
     setDrawingMode,
+    geometryEditingAoiId,
+    saveAOIGeometryEdit,
+    cancelAOIGeometryEdit,
     isLeftSidebarOpen,
     toggleLeftSidebar,
     isRightPanelOpen,
@@ -34,7 +37,7 @@ export const MapToolbar: React.FC = () => {
     scenes,
   } = useGeospatialStore();
 
-  const { fitBounds, resetView } = useMapInstance();
+  const { fitBounds, resetView, getDraw } = useMapInstance();
 
   const selectedAOI = aois.find((a) => a.properties.id === selectedAoiId);
 
@@ -70,6 +73,8 @@ export const MapToolbar: React.FC = () => {
         <button
           type="button"
           onClick={toggleLeftSidebar}
+          aria-label={isLeftSidebarOpen ? "Hide Workspace Panel" : "Show Workspace Panel"}
+          aria-expanded={isLeftSidebarOpen}
           className={cn(
             "p-1.5 rounded-md text-content-secondary hover:text-content-primary hover:bg-surface-elevated transition-colors border border-border-subtle shrink-0",
             isLeftSidebarOpen && "bg-surface-elevated text-accent-primary border-accent-primary/40"
@@ -81,7 +86,7 @@ export const MapToolbar: React.FC = () => {
 
         <MapSearch />
 
-        <div className="hidden sm:block">
+        <div>
           <BasemapSelector />
         </div>
       </div>
@@ -104,13 +109,31 @@ export const MapToolbar: React.FC = () => {
             <span className="text-2xs font-mono px-2 py-1 rounded bg-amber-500/20 text-amber-400 font-semibold border border-amber-500/40 animate-pulse">
               {drawingMode === "drawing" ? "Drawing Polygon" : "Editing Vertices"}
             </span>
+            {geometryEditingAoiId && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="h-7 text-2xs px-2"
+                onClick={saveAOIGeometryEdit}
+                title="Save edited AOI geometry"
+              >
+                Save Geometry
+              </Button>
+            )}
             <Button
               variant="destructive"
               size="sm"
               className="h-7 text-2xs px-2"
               leftIcon={<X className="w-3 h-3" />}
-              onClick={() => setDrawingMode("idle")}
-              title="Cancel drawing mode"
+              onClick={() => {
+                if (geometryEditingAoiId) {
+                  cancelAOIGeometryEdit();
+                } else {
+                  getDraw()?.clear();
+                  setDrawingMode("idle");
+                }
+              }}
+              title={geometryEditingAoiId ? "Cancel AOI geometry edit" : "Cancel drawing mode"}
             >
               Cancel
             </Button>
@@ -154,6 +177,8 @@ export const MapToolbar: React.FC = () => {
         <button
           type="button"
           onClick={toggleRightPanel}
+          aria-label={isRightPanelOpen ? "Hide Inspector Panel" : "Show Inspector Panel"}
+          aria-expanded={isRightPanelOpen}
           className={cn(
             "p-1.5 rounded-md text-content-secondary hover:text-content-primary hover:bg-surface-elevated transition-colors border border-border-subtle shrink-0",
             isRightPanelOpen && "bg-surface-elevated text-accent-primary border-accent-primary/40"
