@@ -1,283 +1,333 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ArrowDownToLine, ArrowLeft, FileText, FilterX, Search } from "lucide-react";
+import { AnalysisJobRecord } from "@/features/analysis/types";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useToast } from "@/hooks/useToast";
-import {
-  Download,
-  AlertTriangle,
-  Printer,
-} from "lucide-react";
-
-interface ReportDossier {
-  id: string;
-  code: string;
-  title: string;
-  sceneName: string;
-  sensor: string;
-  date: string;
-  analyst: string;
-  classification: string;
-  summary: string;
-  detectionCount: number;
-  peakConfidence: number;
-  status: "Finalized" | "Draft";
-}
-
-const SAMPLE_REPORTS: ReportDossier[] = [
-  {
-    id: "rep_01",
-    code: "GEOASTRA-REP-2024-0042",
-    title: "Permian Basin Methane Emission & Point-Source Anomaly Audit",
-    sceneName: "AVIRIS_NG_PERMIAN_2024_03A",
-    sensor: "NASA AVIRIS-NG (425 bands, 3.8m GSD)",
-    date: "2024-03-15",
-    analyst: "Alex Mercer (Senior Geospatial Analyst)",
-    classification: "GEOSPATIAL INTELLIGENCE REPORT [SAMPLE]",
-    summary: "High-resolution airborne hyperspectral survey of northern Delaware basin identified 18 anomalous SWIR absorption plumes consistent with fugitive methane emissions (1660 nm & 2320 nm). Peak CEM detection confidence reached 0.964.",
-    detectionCount: 18,
-    peakConfidence: 0.964,
-    status: "Finalized",
-  },
-  {
-    id: "rep_02",
-    code: "GEOASTRA-REP-2024-0039",
-    title: "Atacama Lithium Brine Evaporite & Mineral Mapping Dossier",
-    sceneName: "ENMAP_SALAR_ATACAMA_04",
-    sensor: "DLR EnMAP (242 bands, 30m GSD)",
-    date: "2024-02-20",
-    analyst: "Elena Vance (Spectral Remote Sensing Lead)",
-    classification: "GEOSPATIAL INTELLIGENCE REPORT [SAMPLE]",
-    summary: "Spaceborne EnMAP VNIR/SWIR acquisition unmixed lithium carbonate and borate evaporite crusts across 450 km² of the Salar de Atacama basin. Spectral angle mapping confirmed high purity evaporite distribution.",
-    detectionCount: 26,
-    peakConfidence: 0.928,
-    status: "Finalized",
-  },
-  {
-    id: "rep_03",
-    code: "GEOASTRA-REP-2024-0031",
-    title: "Gulf Coast Offshore Marine Hydrocarbon Sheen Investigation",
-    sceneName: "PRISMA_GULF_COAST_L2D_901",
-    sensor: "ASI PRISMA (239 bands, 30m GSD)",
-    date: "2024-01-11",
-    analyst: "Alex Mercer (Senior Geospatial Analyst)",
-    classification: "GEOSPATIAL INTELLIGENCE REPORT [SAMPLE]",
-    summary: "PRISMA hyperspectral L2D datacube analyzed with RXD anomaly detector and SWIR oil sheen matched filter. 14 spatial outliers identified along active offshore production leases.",
-    detectionCount: 14,
-    peakConfidence: 0.892,
-    status: "Draft",
-  },
-];
+import { Card, CardContent } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
+import { useDemoAnalysisJobStore } from "@/features/jobs/store/demoAnalysisJobStore";
+import { useGeospatialStore } from "@/features/geospatial/store/geospatialStore";
+import { BUILT_IN_SCENES } from "@/features/scenes/data/sceneCatalog";
+import { listScenes } from "@/features/scenes/services/mockSceneService";
+import { useSceneCatalogStore } from "@/features/scenes/store/sceneCatalogStore";
+import { listSignatures } from "@/features/signatures/services/signatureService";
+import { useSignatureStore } from "@/features/signatures/store/signatureStore";
+import { createDemoResultFixture } from "@/features/results/data/demoResultFixtures";
+import { ReportDocument } from "./ReportDocument";
+import { deriveReports, DerivedReport } from "./reportService";
 
 export const ReportsPage: React.FC = () => {
-  const toast = useToast();
-  const [selectedReportId, setSelectedReportId] = useState("rep_01");
+  const { reportId } = useParams();
+  const location = useLocation();
+  const jobs = useDemoAnalysisJobStore((state) => state.jobs);
+  const reports = useMemo(() => deriveReports(jobs), [jobs]);
+  if (!reportId) return <ReportCatalogue reports={reports} jobs={jobs} />;
+  const report = reports.find((item) => item.id === reportId);
+  const job = report ? jobs.find((item) => item.id === report.jobId) : undefined;
+  if (!report || !job) return <ReportNotFound reportId={reportId} />;
+  return <ReportDetail report={report} job={job} isPreview={location.pathname.endsWith("/preview")} />;
+};
 
-  const activeReport =
-    SAMPLE_REPORTS.find((r) => r.id === selectedReportId) || SAMPLE_REPORTS[0];
-
-  const handleExport = (format: string) => {
-    toast.info(
-      "Report Export (Demo)",
-      `Generated sample download for [${activeReport.code}] in ${format} format.`
-    );
+function ReportCatalogue({ reports, jobs }: { reports: DerivedReport[]; jobs: AnalysisJobRecord[] }) {
+  const [query, setQuery] = useState("");
+  const [algorithm, setAlgorithm] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const algorithms = [...new Set(reports.map((report) => report.algorithm))].sort();
+  const filteredReports = reports
+    .filter((report) => {
+      const searchText = `${report.title} ${report.id} ${report.jobId} ${report.aoiName} ${report.sceneName}`.toLowerCase();
+      return (!query.trim() || searchText.includes(query.trim().toLowerCase())) &&
+        (algorithm === "all" || report.algorithm === algorithm) &&
+        (status === "all" || report.status === status);
+    })
+    .sort((left, right) => {
+      const difference = (Date.parse(left.createdAt ?? "") || 0) - (Date.parse(right.createdAt ?? "") || 0);
+      return sortOrder === "newest" ? -difference : difference;
+    });
+  const clearFilters = () => {
+    setQuery("");
+    setAlgorithm("all");
+    setStatus("all");
+    setSortOrder("newest");
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Page Header */}
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6 lg:p-8">
       <PageHeader
         category="INTELLIGENCE REPORTING"
-        title="Mission Intelligence Reports & Exports"
-        subtitle="Generate, review, and export formal geospatial intelligence briefs, executive target summaries, and spectral validation dossiers."
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge variant="warning" size="md" dot>
-              SAMPLE REPORT CATALOG
-            </Badge>
-          </div>
-        }
+        title="Reports"
+        subtitle="Browse report views derived from completed analysis jobs and their associated illustrative Phase 9 result fixtures."
+        actions={<Badge variant="warning" size="md">DEMO REPORTS</Badge>}
       />
+      <div className="border border-status-warning/30 bg-status-warning/5 p-3 text-xs leading-relaxed text-content-secondary">
+        <strong className="text-status-warning">ILLUSTRATIVE CONTENT.</strong> Reports are created as views of completed jobs in this browser. Metrics and detections reuse the job-linked demo fixture; they are not validated scientific results.
+      </div>
 
-      {/* Demo Notice Banner */}
-      <div className="p-3 rounded-lg border border-status-warning/30 bg-status-warning/10 text-xs flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-status-warning shrink-0" />
-          <span className="text-content-secondary">
-            <strong className="text-status-warning font-semibold">Report Catalog & Dossier Preview:</strong> Intelligence briefings shown below represent sample formatted exports. In this demo workstation, PDF and GeoJSON rendering is preview data.
+      <div className="flex flex-col gap-3 border border-border-subtle bg-surface-panel p-3 lg:flex-row lg:items-end">
+        <label className="min-w-0 flex-1">
+          <span className="mb-1.5 block text-2xs font-medium text-content-secondary">Search reports</span>
+          <span className="flex h-9 items-center gap-2 border border-border-subtle bg-surface-main px-3 focus-within:border-accent-primary">
+            <Search className="h-3.5 w-3.5 shrink-0 text-content-muted" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-xs text-content-primary outline-none placeholder:text-content-muted"
+              placeholder="Title, report ID, job ID, AOI, or scene…"
+              aria-label="Search reports"
+            />
           </span>
-        </div>
+        </label>
+        <label className="text-2xs text-content-secondary">
+          <span className="mb-1.5 block">Algorithm</span>
+          <select className="h-9 min-w-32 border border-border-subtle bg-surface-main px-2 text-xs text-content-primary" value={algorithm} onChange={(event) => setAlgorithm(event.target.value)} aria-label="Filter by algorithm">
+            <option value="all">All algorithms</option>
+            {algorithms.map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}
+          </select>
+        </label>
+        <label className="text-2xs text-content-secondary">
+          <span className="mb-1.5 block">Report status</span>
+          <select className="h-9 min-w-32 border border-border-subtle bg-surface-main px-2 text-xs text-content-primary" value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter by report status">
+            <option value="all">All statuses</option>
+            <option value="ready">Ready</option>
+          </select>
+        </label>
+        <label className="text-2xs text-content-secondary">
+          <span className="mb-1.5 block">Sort by</span>
+          <select className="h-9 min-w-32 border border-border-subtle bg-surface-main px-2 text-xs text-content-primary" value={sortOrder} onChange={(event) => setSortOrder(event.target.value as "newest" | "oldest")} aria-label="Sort reports">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </label>
+        <Button size="sm" variant="outline" leftIcon={<FilterX className="h-3.5 w-3.5" />} onClick={clearFilters}>Clear filters</Button>
       </div>
 
-      {/* Report Workspace: Left List (4 cols) | Right Document Preview (8 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Report List (4 cols) */}
-        <div className="lg:col-span-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-mono uppercase tracking-wider text-content-secondary">
-              Report Archives (Sample)
-            </h3>
-            <Badge variant="outline" size="sm">
-              {SAMPLE_REPORTS.length} DOSSIERS
-            </Badge>
+      {reports.length === 0 ? (
+        <Card><CardContent className="flex flex-col items-center gap-3 px-5 py-14 text-center">
+          <FileText className="h-6 w-6 text-content-muted" />
+          <h2 className="text-sm font-semibold text-content-primary">No completed analyses to report</h2>
+          <p className="max-w-lg text-xs leading-relaxed text-content-muted">
+            Reports become available when an analysis job reaches Completed. Queued, processing, failed, and cancelled jobs are not represented as reports.
+            {jobs.some((job) => job.status === "queued" || job.status === "processing") ? " Active demo jobs are still in their simulated lifecycle." : ""}
+          </p>
+          <div className="flex flex-wrap gap-2"><Link to="/jobs"><Button size="sm" variant="outline">Processing Jobs</Button></Link><Link to="/analysis/new"><Button size="sm">Analysis Studio</Button></Link></div>
+        </CardContent></Card>
+      ) : (
+        <section className="overflow-hidden border border-border-subtle bg-surface-panel" aria-label="Report catalogue">
+          <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+            <div><h2 className="text-xs font-semibold text-content-primary">Completed-job reports</h2><p className="mt-1 text-2xs text-content-muted">{filteredReports.length} of {reports.length} reports · one report view per completed job</p></div>
+            <Badge variant="outline">{filteredReports.length} READY</Badge>
           </div>
-
-          <div className="space-y-3">
-            {SAMPLE_REPORTS.map((rep) => {
-              const isSelected = rep.id === selectedReportId;
-              return (
-                <div
-                  key={rep.id}
-                  onClick={() => setSelectedReportId(rep.id)}
-                  className={`p-3.5 rounded-lg border transition-all cursor-pointer ${
-                    isSelected
-                      ? "bg-surface-elevated border-accent-primary ring-1 ring-accent-primary/40 shadow-md"
-                      : "bg-surface-secondary/50 border-border-subtle hover:border-border-strong hover:bg-surface-secondary"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-2xs text-accent-primary font-semibold">
-                      {rep.code}
-                    </span>
-                    <Badge variant={rep.status === "Finalized" ? "success" : "outline"} size="sm">
-                      {rep.status}
-                    </Badge>
-                  </div>
-                  <h4 className="text-xs font-semibold text-content-primary mt-1 line-clamp-2">
-                    {rep.title}
-                  </h4>
-                  <div className="mt-2 pt-2 border-t border-border-subtle flex items-center justify-between text-2xs font-mono text-content-muted">
-                    <span>{rep.date}</span>
-                    <span>{rep.detectionCount} Targets</span>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[960px] border-collapse text-left text-xs">
+              <thead className="bg-surface-secondary/40 text-2xs uppercase tracking-wide text-content-muted">
+                <tr>
+                  <th className="px-4 py-3">Report</th>
+                  <th className="px-4 py-3">Job / AOI / scene</th>
+                  <th className="px-4 py-3">Algorithm</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3"><span className="sr-only">Action</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {filteredReports.map((report) => <ReportRow key={report.id} report={report} />)}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        {/* Right: Formal Briefing Document Preview (8 cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          <Card variant="elevated" className="border-border-strong/70">
-            {/* Dossier Header Toolbar */}
-            <CardHeader className="pb-3 border-b border-border-subtle bg-surface-secondary/40">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xs font-mono px-2 py-0.5 rounded bg-status-warning/10 text-status-warning border border-status-warning/30 font-semibold">
-                      {activeReport.classification}
-                    </span>
-                    <span className="text-2xs font-mono text-content-muted">{activeReport.code}</span>
-                  </div>
-                  <CardTitle className="text-sm font-bold mt-1 text-content-primary">
-                    {activeReport.title}
-                  </CardTitle>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<Printer className="w-3.5 h-3.5" />}
-                    onClick={() => handleExport("PDF")}
-                  >
-                    Export PDF
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    leftIcon={<Download className="w-3.5 h-3.5" />}
-                    onClick={() => handleExport("GeoJSON")}
-                  >
-                    GeoJSON Package
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-
-            {/* Document Body */}
-            <CardContent className="p-6 space-y-5">
-              {/* Executive Summary Block */}
-              <div className="space-y-2">
-                <h4 className="text-2xs font-mono uppercase tracking-wider text-accent-primary font-bold">
-                  1. Executive Briefing &amp; Mission Summary
-                </h4>
-                <p className="text-xs text-content-secondary leading-relaxed bg-surface-panel p-3.5 rounded-lg border border-border-subtle">
-                  {activeReport.summary}
-                </p>
-              </div>
-
-              {/* Mission Metadata Grid */}
-              <div className="space-y-2">
-                <h4 className="text-2xs font-mono uppercase tracking-wider text-accent-primary font-bold">
-                  2. Sensor &amp; Analysis Parameters
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-2xs font-mono bg-surface-secondary/50 p-3.5 rounded-lg border border-border-subtle">
-                  <div>
-                    <span className="text-content-muted block">INPUT SCENE:</span>
-                    <span className="text-content-primary font-semibold">{activeReport.sceneName}</span>
-                  </div>
-                  <div>
-                    <span className="text-content-muted block">SENSOR PLATFORM:</span>
-                    <span className="text-content-primary">{activeReport.sensor}</span>
-                  </div>
-                  <div>
-                    <span className="text-content-muted block">ANALYST:</span>
-                    <span className="text-content-primary">{activeReport.analyst}</span>
-                  </div>
-                  <div>
-                    <span className="text-content-muted block">DATE COMPILED:</span>
-                    <span className="text-content-primary">{activeReport.date}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Target Detection Findings Table */}
-              <div className="space-y-2">
-                <h4 className="text-2xs font-mono uppercase tracking-wider text-accent-primary font-bold">
-                  3. Confirmed Spatial Hotspots (Top Detections)
-                </h4>
-                <div className="border border-border-subtle rounded-lg overflow-hidden">
-                  <table className="w-full text-left text-2xs font-mono">
-                    <thead className="bg-surface-secondary border-b border-border-subtle text-content-muted">
-                      <tr>
-                        <th className="p-2.5">TARGET ID</th>
-                        <th className="p-2.5">COORDINATES (WGS84)</th>
-                        <th className="p-2.5">CONFIDENCE</th>
-                        <th className="p-2.5">EST. FOOTPRINT</th>
-                        <th className="p-2.5">STATUS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-subtle text-content-secondary">
-                      <tr className="hover:bg-surface-elevated/40">
-                        <td className="p-2.5 font-semibold text-content-primary">HOTSPOT-01</td>
-                        <td className="p-2.5">31.9686°N, 102.0988°W</td>
-                        <td className="p-2.5 text-status-warning font-semibold">0.964</td>
-                        <td className="p-2.5">14,200 m²</td>
-                        <td className="p-2.5"><Badge variant="danger" size="sm">CRITICAL</Badge></td>
-                      </tr>
-                      <tr className="hover:bg-surface-elevated/40">
-                        <td className="p-2.5 font-semibold text-content-primary">HOTSPOT-02</td>
-                        <td className="p-2.5">31.9712°N, 102.1024°W</td>
-                        <td className="p-2.5 text-status-warning font-semibold">0.941</td>
-                        <td className="p-2.5">8,800 m²</td>
-                        <td className="p-2.5"><Badge variant="warning" size="sm">ELEVATED</Badge></td>
-                      </tr>
-                      <tr className="hover:bg-surface-elevated/40">
-                        <td className="p-2.5 font-semibold text-content-primary">HOTSPOT-03</td>
-                        <td className="p-2.5">31.9644°N, 102.0910°W</td>
-                        <td className="p-2.5 text-accent-primary font-semibold">0.887</td>
-                        <td className="p-2.5">5,100 m²</td>
-                        <td className="p-2.5"><Badge variant="outline" size="sm">MONITOR</Badge></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          {filteredReports.length === 0 && <div className="px-4 py-10 text-center text-xs text-content-muted">No reports match these filters. Clear filters or change the search query.</div>}
+        </section>
+      )}
     </div>
   );
-};
+}
+
+function ReportRow({ report }: { report: DerivedReport }) {
+  return <tr className="align-top transition-colors hover:bg-surface-secondary/20">
+    <td className="max-w-xs px-4 py-3">
+      <Link to={`/reports/${encodeURIComponent(report.id)}`} className="font-medium text-content-primary hover:text-accent-primary">{report.title}</Link>
+      <p className="mt-1 break-all font-mono text-2xs text-content-muted">{report.id}</p>
+      <p className="mt-1 line-clamp-2 text-2xs leading-relaxed text-content-muted">{report.summary}</p>
+    </td>
+    <td className="max-w-sm px-4 py-3">
+      <p className="break-all font-mono text-2xs text-accent-primary">{report.jobId}</p>
+      <p className="mt-1 text-content-secondary">{report.aoiName}</p>
+      <p className="mt-1 text-2xs text-content-muted">{report.sceneName}</p>
+    </td>
+    <td className="whitespace-nowrap px-4 py-3 text-content-secondary">{report.algorithm.toUpperCase()}</td>
+    <td className="whitespace-nowrap px-4 py-3 text-content-secondary">{formatDate(report.createdAt)}</td>
+    <td className="px-4 py-3"><Badge variant="success">READY</Badge></td>
+    <td className="whitespace-nowrap px-4 py-3"><Link to={`/reports/${encodeURIComponent(report.id)}`} className="text-xs text-accent-primary hover:underline">Open report →</Link></td>
+  </tr>;
+}
+
+function ReportDetail({ report, job, isPreview }: { report: DerivedReport; job: AnalysisJobRecord; isPreview: boolean }) {
+  const navigate = useNavigate();
+  const aois = useGeospatialStore((state) => state.aois);
+  const uploadedScenes = useSceneCatalogStore((state) => state.uploadedScenes);
+  const customSignatures = useSignatureStore((state) => state.customSignatures);
+  const scenes = useMemo(() => listScenes(BUILT_IN_SCENES, uploadedScenes), [uploadedScenes]);
+  const signatures = useMemo(() => listSignatures(customSignatures), [customSignatures]);
+  const aoi = aois.find((item) => item.properties.id === job.configuration.aoiId);
+  const scene = scenes.find((item) => item.id === job.configuration.sceneId);
+  const targetSignature = signatures.find((item) => item.id === job.configuration.targetSignatureId) ?? null;
+  const fixture = useMemo(() => createDemoResultFixture(job, aoi, scene), [aoi, job, scene]);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportStarted, setExportStarted] = useState(false);
+  const [exportComplete, setExportComplete] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+
+  useEffect(() => {
+    if (!exportStarted || exportComplete) return;
+    const timer = window.setTimeout(() => {
+      const next = Math.min(100, exportProgress + 20);
+      setExportProgress(next);
+      if (next === 100) {
+        setExportStarted(false);
+        setExportComplete(true);
+      }
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [exportComplete, exportProgress, exportStarted]);
+
+  const openExport = () => {
+    setExportProgress(0);
+    setExportStarted(false);
+    setExportComplete(false);
+    setExportOpen(true);
+  };
+  const closeExport = () => {
+    setExportOpen(false);
+    setExportStarted(false);
+  };
+  const document = (
+    <ReportDocument
+    key={report.id}
+    reportId={report.id}
+      title={report.title}
+      createdAt={report.createdAt}
+      job={job}
+      fixture={fixture}
+      aoi={aoi}
+      scene={scene}
+      targetSignature={targetSignature}
+    />
+  );
+
+  if (isPreview) {
+    return (
+      <div className="mx-auto max-w-[1200px] space-y-5 p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-3">
+          <Button size="sm" variant="ghost" leftIcon={<ArrowLeft className="h-3.5 w-3.5" />} onClick={() => navigate(`/reports/${encodeURIComponent(report.id)}`)}>Back to report</Button>
+          <Button size="sm" variant="outline" leftIcon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={openExport}>Export PDF</Button>
+        </div>
+        <div className="border border-border-subtle bg-surface-panel p-4 sm:p-7 lg:p-10">{document}</div>
+        <PdfExportDialog
+          open={exportOpen}
+          report={report}
+          progress={exportProgress}
+          complete={exportComplete}
+          started={exportStarted}
+          onClose={closeExport}
+          onStart={() => setExportStarted(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6 lg:p-8">
+      <PageHeader
+        category="INTELLIGENCE REPORTING"
+        title="Analysis report"
+        subtitle="Scientific-document view linked to a completed job and its existing illustrative result fixture."
+        actions={<Badge variant="warning">DEMO / ILLUSTRATIVE</Badge>}
+      />
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-border-subtle bg-surface-panel p-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+          <Link to="/reports" className="inline-flex items-center gap-1.5 text-content-secondary hover:text-accent-primary"><ArrowLeft className="h-3.5 w-3.5" />Report catalogue</Link>
+          <span className="break-all font-mono text-2xs text-content-muted">{report.id}</span>
+          <Badge variant="success">READY</Badge>
+          <Badge variant="outline">JOB COMPLETED</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" leftIcon={<FileText className="h-3.5 w-3.5" />} onClick={() => navigate(`/reports/${encodeURIComponent(report.id)}/preview`)}>Preview report</Button>
+          <Button size="sm" leftIcon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={openExport}>Export PDF</Button>
+        </div>
+      </div>
+      <div className="border border-border-subtle bg-surface-panel p-4 sm:p-6">{document}</div>
+      <PdfExportDialog
+        open={exportOpen}
+        report={report}
+        progress={exportProgress}
+        complete={exportComplete}
+        started={exportStarted}
+        onClose={closeExport}
+        onStart={() => setExportStarted(true)}
+      />
+    </div>
+  );
+}
+
+function PdfExportDialog({
+  open,
+  report,
+  progress,
+  complete,
+  started,
+  onClose,
+  onStart,
+}: {
+  open: boolean;
+  report: DerivedReport;
+  progress: number;
+  complete: boolean;
+  started: boolean;
+  onClose: () => void;
+  onStart: () => void;
+}) {
+  return <Modal
+    isOpen={open}
+    onClose={onClose}
+    title="PDF export · demo simulation"
+    description="Frontend-only report export"
+    size="md"
+    footer={complete
+      ? <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+      : <>
+        <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button size="sm" onClick={onStart} disabled={started || progress > 0}>{started || progress > 0 ? "Simulating…" : "Start demo export"}</Button>
+      </>}
+  >
+    <div className="space-y-4 text-xs leading-relaxed text-content-secondary">
+      <p>The PDF-generation library is not available in this frontend. This interaction simulates export progress only; no PDF file is generated and no download link will be provided.</p>
+      <div className="border border-border-subtle bg-surface-secondary/20 p-3">
+        <p className="text-2xs uppercase tracking-wide text-content-muted">Report</p>
+        <p className="mt-1 break-all font-mono text-content-primary">{report.id}</p>
+        <p className="mt-1 text-content-secondary">{report.title}</p>
+      </div>
+      {progress > 0 && <div>
+        <div className="mb-1 flex justify-between font-mono text-2xs"><span>{complete ? "Simulation complete" : "Simulating report export"}</span><span>{progress}%</span></div>
+        <div className="h-2 overflow-hidden bg-surface-secondary"><div className="h-full bg-accent-primary transition-all" style={{ width: `${progress}%` }} /></div>
+      </div>}
+      {complete && <p role="status" className="border border-status-success/30 bg-status-success/5 p-3 text-status-success">Demo export simulation completed. No PDF was created or downloaded.</p>}
+    </div>
+  </Modal>;
+}
+
+function ReportNotFound({ reportId }: { reportId: string }) {
+  return <div className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6 lg:p-8">
+    <PageHeader category="INTELLIGENCE REPORTING" title="Report not found" subtitle="Reports are derived from completed jobs in the shared Processing Jobs store." />
+    <Card><CardContent className="space-y-3 p-5">
+      <p className="break-all font-mono text-xs text-content-muted">{reportId}</p>
+      <p className="text-xs text-content-secondary">This report ID does not match a current completed job. Incomplete, failed, or cancelled jobs do not have reports.</p>
+      <Link className="text-xs text-accent-primary hover:underline" to="/reports">Back to report catalogue</Link>
+    </CardContent></Card>
+  </div>;
+}
+
+function formatDate(value: string | null): string {
+  return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not available";
+}

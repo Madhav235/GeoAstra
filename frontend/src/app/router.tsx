@@ -85,6 +85,14 @@ export const router = createBrowserRouter([
         element: <ReportsPage />,
       },
       {
+        path: "reports/:reportId/preview",
+        element: <ReportsPage />,
+      },
+      {
+        path: "reports/:reportId",
+        element: <ReportsPage />,
+      },
+      {
         path: "status",
         element: <StatusPage />,
       },
