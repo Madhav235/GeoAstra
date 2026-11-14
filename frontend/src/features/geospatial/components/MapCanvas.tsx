@@ -542,8 +542,20 @@ export const MapCanvas: React.FC = () => {
       map.resize();
       if (hasFittedInitialViewRef.current) return;
 
-      const features = aoisRef.current;
-      if (features.length > 0) {
+      const selectedScene = scenesRef.current.find(
+        (scene) => scene.properties.id === selectedSceneIdRef.current
+      );
+      if (selectedScene) {
+        const [west, south, east, north] = selectedScene.properties.bbox;
+        map.fitBounds(
+          [
+            [west, south],
+            [east, north],
+          ],
+          { padding: 48, maxZoom: 14, duration: 0 }
+        );
+      } else if (aoisRef.current.length > 0) {
+        const features = aoisRef.current;
         const bounds = features.reduce(
           (extent, feature) => {
             const [west, south, east, north] = feature.properties.bbox;
@@ -603,6 +615,34 @@ export const MapCanvas: React.FC = () => {
       map.setStyle(targetStyle);
     }
   }, [activeBasemap]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const selectedScene = scenes.find((scene) => scene.properties.id === selectedSceneId);
+    if (!map || !selectedScene) return;
+
+    let cancelled = false;
+    const fitSelectedScene = () => {
+      if (cancelled || !map.isStyleLoaded()) return;
+      const [west, south, east, north] = selectedScene.properties.bbox;
+      map.resize();
+      map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        { padding: 48, maxZoom: 14, duration: 0 }
+      );
+    };
+
+    if (map.isStyleLoaded()) fitSelectedScene();
+    else map.once("load", fitSelectedScene);
+
+    return () => {
+      cancelled = true;
+      map.off("load", fitSelectedScene);
+    };
+  }, [selectedSceneId, scenes]);
 
   // Sync AOIs GeoJSON data to MapLibre source
   useEffect(() => {

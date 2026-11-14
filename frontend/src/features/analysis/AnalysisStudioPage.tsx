@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/hooks/useToast";
+import { BUILT_IN_SCENES } from "@/features/scenes/data/sceneCatalog";
+import { useSceneCatalogStore } from "@/features/scenes/store/sceneCatalogStore";
 import {
   Activity,
   Sliders,
@@ -83,6 +85,15 @@ export const AnalysisStudioPage: React.FC = () => {
   const [selectedAlgoId, setSelectedAlgoId] = useState<"rxd" | "mf" | "cem" | "fusion">("cem");
   const [selectedScene, setSelectedScene] = useState("AVIRIS_NG_PERMIAN_2024_03A");
   const [threshold, setThreshold] = useState(0.85);
+  const uploadedScenes = useSceneCatalogStore((state) => state.uploadedScenes);
+  const selectedSceneIds = useSceneCatalogStore((state) => state.selectedSceneIds);
+  const catalogueScenes = [...uploadedScenes, ...BUILT_IN_SCENES];
+  const selectedCatalogueScene = catalogueScenes.find((scene) => selectedSceneIds.includes(scene.id));
+  const activeScene = catalogueScenes.find((scene) => scene.name === selectedScene);
+
+  useEffect(() => {
+    if (selectedCatalogueScene) setSelectedScene(selectedCatalogueScene.name);
+  }, [selectedCatalogueScene]);
 
   const selectedAlgo = ALGORITHMS.find((a) => a.id === selectedAlgoId) || ALGORITHMS[0];
 
@@ -190,12 +201,10 @@ export const AnalysisStudioPage: React.FC = () => {
                 <Select
                   value={selectedScene}
                   onChange={(e) => setSelectedScene(e.target.value)}
-                  options={[
-                    { label: "AVIRIS_NG_PERMIAN_2024_03A (425 bands, 3.8m GSD)", value: "AVIRIS_NG_PERMIAN_2024_03A" },
-                    { label: "PRISMA_GULF_COAST_L2D_901 (239 bands, 30m GSD)", value: "PRISMA_GULF_COAST_L2D_901" },
-                    { label: "ENMAP_SALAR_ATACAMA_04 (242 bands, 30m GSD)", value: "ENMAP_SALAR_ATACAMA_04" },
-                    { label: "EMIT_ALGERIA_MINERAL_22 (285 bands, 60m GSD)", value: "EMIT_ALGERIA_MINERAL_22" },
-                  ]}
+                  options={catalogueScenes.map((scene) => ({
+                    label: `${scene.name} (${scene.spectralBands ?? "?"} bands, ${scene.spatialResolutionM ?? "?"}m GSD)`,
+                    value: scene.name,
+                  }))}
                 />
               </div>
 
@@ -292,8 +301,12 @@ export const AnalysisStudioPage: React.FC = () => {
                   <span className="text-accent-primary font-semibold">{threshold}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-content-muted">ESTIMATED COMPUTE:</span>
-                  <span className="text-content-secondary">~45 seconds (425 bands)</span>
+                  <span className="text-content-muted">SCENE BANDS:</span>
+                  <span className="text-content-secondary">{activeScene?.spectralBands ?? "Unknown"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-content-muted">EXECUTION:</span>
+                  <span className="text-content-secondary">Frontend preview only</span>
                 </div>
               </div>
 
